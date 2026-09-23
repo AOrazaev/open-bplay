@@ -72,7 +72,13 @@ function drawToken(ctx, token, map) {
 }
 
 function drawTokens(ctx, tokens, map) {
-  tokens.forEach(token => drawToken(ctx, token, map));
+  // Draw the ball last so it always renders on top of player tokens,
+  // regardless of spawn/array order (e.g. when a player and the ball
+  // overlap at a frame's start/end position).
+  const players = tokens.filter(t => t.type !== TOKEN_TYPES.BALL);
+  const balls = tokens.filter(t => t.type === TOKEN_TYPES.BALL);
+  players.forEach(token => drawToken(ctx, token, map));
+  balls.forEach(token => drawToken(ctx, token, map));
 }
 
 // Finds the topmost (last-drawn) token within hitRadiusFt of the given
