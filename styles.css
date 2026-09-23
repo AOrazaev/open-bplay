@@ -147,9 +147,10 @@ body {
 
 .app-layout {
   display: flex;
-  align-items: flex-start;
+  align-items: stretch;
   gap: 20px;
   padding: 0 24px 24px;
+  min-height: calc(100vh - 65px);
 }
 
 .main-panel {
@@ -172,7 +173,6 @@ body {
   background: var(--card);
   border-radius: 12px;
   padding: 16px;
-  margin-top: 24px;
   display: flex;
   flex-direction: column;
   gap: 10px;
