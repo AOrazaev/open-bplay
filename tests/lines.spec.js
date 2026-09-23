@@ -202,11 +202,15 @@ test.describe('Checkpoint 3 — draw movement lines', () => {
     const results = await page.evaluate(() => {
       const start = { x: 5, y: 5 };
       const end = { x: 25, y: 5 };
-      return [0, 4, -6].map(curveOffsetFt => {
-        const controlFt = resolveControlPoint(start, end, curveOffsetFt);
-        const baseFt = bezierSamplePoints(start, controlFt, end, 40);
+      return [
+        { alongFt: 0, perpFt: 0 },
+        { alongFt: 0, perpFt: 4 },
+        { alongFt: 5, perpFt: -6 },
+      ].map(curveHandle => {
+        const handleFt = resolveHandlePointFt(start, end, curveHandle);
+        const baseFt = catmullRomSamplePoints(start, handleFt, end, 40);
         const path = squiggleAlongBase(baseFt);
-        return { curveOffsetFt, first: path[0], last: path[path.length - 1] };
+        return { curveHandle, first: path[0], last: path[path.length - 1] };
       });
     });
 
@@ -240,7 +244,7 @@ test.describe('Checkpoint 3.1 — select, curve, and move drawn lines', () => {
     await expect.poll(() => page.evaluate(() => selectedLineId)).toBeNull();
   });
 
-  test('dragging a selected line\'s curve handle bends it', async ({ page }) => {
+  test('dragging a selected line\'s curve handle perpendicular bends it into a symmetric arch', async ({ page }) => {
     await page.goto('/');
     await spawnTokenAt(page, 'offense', 10, 30);
     await page.locator('.tool-btn[data-tool="cut"]').click();
@@ -253,30 +257,62 @@ test.describe('Checkpoint 3.1 — select, curve, and move drawn lines', () => {
     const lineId = await page.evaluate(() => lines[0].id);
     await expect.poll(() => page.evaluate(() => selectedLineId)).toBe(lineId);
 
-    // Drag the curve handle (initially at the midpoint, since curveOffsetFt
-    // starts at 0) 8ft further along the court's y-axis — perpendicular to
-    // this horizontal line.
+    // Drag the curve handle (initially at the midpoint) 8ft further along
+    // the court's y-axis — perpendicular to this horizontal line.
     const targetPoint = await toClientPoint(page, 20, 38);
     await page.mouse.move(midPoint.x, midPoint.y);
     await page.mouse.down();
     await page.mouse.move(targetPoint.x, targetPoint.y, { steps: 5 });
     await page.mouse.up();
 
-    const curveOffsetFt = await page.evaluate(() => lines[0].curveOffsetFt);
-    expect(curveOffsetFt).toBeCloseTo(8, 0);
+    const curveHandle = await page.evaluate(() => lines[0].curveHandle);
+    expect(curveHandle.alongFt).toBeCloseTo(0, 0);
+    expect(curveHandle.perpFt).toBeCloseTo(8, 0);
 
-    // The visible curve must pass exactly through the dragged-to point at
-    // its midpoint (t=0.5) — not just "roughly" bulge toward it — since
-    // that's the whole point of redefining curveOffsetFt as an on-curve
-    // offset rather than a raw Bézier control-point offset.
-    const midOfCurve = await page.evaluate(() => {
+    // The visible curve must pass exactly through the dragged-to point,
+    // since a Catmull-Rom spline interpolates its handle point exactly
+    // (no "raw control point vs. on-curve point" translation needed).
+    const handlePoint = await page.evaluate(() => {
       const line = lines[0];
       const pts = resolveLineEndpoints(line, tokens);
-      const controlFt = resolveControlPoint(pts.start, pts.end, line.curveOffsetFt);
-      return quadraticPoint(pts.start, controlFt, pts.end, 0.5);
+      return resolveHandlePointFt(pts.start, pts.end, line.curveHandle);
     });
-    expect(midOfCurve.x).toBeCloseTo(20, 5);
-    expect(midOfCurve.y).toBeCloseTo(38, 5);
+    expect(handlePoint.x).toBeCloseTo(20, 5);
+    expect(handlePoint.y).toBeCloseTo(38, 5);
+  });
+
+  test('dragging a selected line\'s curve handle along its axis bends it mostly near one end', async ({ page }) => {
+    await page.goto('/');
+    await spawnTokenAt(page, 'offense', 10, 30);
+    await page.locator('.tool-btn[data-tool="cut"]').click();
+    await dragFromTokenTo(page, 0, 30, 30); // horizontal line, chord from x=10 to x=30
+    await expect.poll(() => page.evaluate(() => lines.length)).toBe(1);
+
+    const midPoint = await toClientPoint(page, 20, 30);
+    await page.mouse.click(midPoint.x, midPoint.y);
+    await expect.poll(() => page.evaluate(() => selectedLineId)).not.toBeNull();
+
+    // Drag the handle to a point close to the start (x=12) and slightly
+    // off-axis (y=32) — this should bend the curve mostly near the start,
+    // leaving the rest close to straight, instead of a symmetric arch.
+    const targetPoint = await toClientPoint(page, 12, 32);
+    await page.mouse.move(midPoint.x, midPoint.y);
+    await page.mouse.down();
+    await page.mouse.move(targetPoint.x, targetPoint.y, { steps: 5 });
+    await page.mouse.up();
+
+    const curveHandle = await page.evaluate(() => lines[0].curveHandle);
+    // Handle moved ~8ft toward the start (chord midpoint is x=20, target
+    // x=12) along the chord, confirming the along-axis freedom works.
+    expect(curveHandle.alongFt).toBeLessThan(-5);
+
+    const handlePoint = await page.evaluate(() => {
+      const line = lines[0];
+      const pts = resolveLineEndpoints(line, tokens);
+      return resolveHandlePointFt(pts.start, pts.end, line.curveHandle);
+    });
+    expect(handlePoint.x).toBeCloseTo(12, 5);
+    expect(handlePoint.y).toBeCloseTo(32, 5);
   });
 
   test('dragging a selected line\'s free-endpoint handle moves its endpoint', async ({ page }) => {
@@ -383,8 +419,8 @@ test.describe('Checkpoint 3.1 — select, curve, and move drawn lines', () => {
     await page.mouse.move(targetPoint.x, targetPoint.y, { steps: 5 });
     await page.mouse.up();
 
-    const curveOffsetFt = await page.evaluate(() => lines[0].curveOffsetFt);
-    expect(curveOffsetFt).toBeCloseTo(8, 0);
+    const curveHandle = await page.evaluate(() => lines[0].curveHandle);
+    expect(curveHandle.perpFt).toBeCloseTo(8, 0);
 
     // The squiggle should still start/end exactly on the tokens despite
     // now riding along a bent baseline.

@@ -186,7 +186,7 @@ courtCanvas.addEventListener('pointermove', (e) => {
     const pts = line && resolveLineEndpoints(line, tokens);
     if (pts) {
       const { x, y } = clientPointToFeet(courtCanvas, e.clientX, e.clientY);
-      line.curveOffsetFt = perpendicularOffset(pts.start, pts.end, { x, y });
+      line.curveHandle = offsetFromChord(pts.start, pts.end, { x, y });
     }
     redraw();
     return;

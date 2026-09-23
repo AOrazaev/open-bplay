@@ -9,10 +9,13 @@ const LINE_TYPES = { CUT: 'cut', PASS: 'pass', SCREEN: 'screen', DRIBBLE: 'dribb
 const LINE_HANDLE_HIT_RADIUS_FT = 1.4;
 
 // `end` is either { tokenId } (line follows that token as it moves) or
-// { x, y } (line ends at a fixed court point). `curveOffsetFt` is the
-// perpendicular distance (from the straight start→end chord) of the point
-// the visible curve/baseline passes through at its midpoint (0 = straight)
-// — for dribble lines this bends the baseline the squiggle rides along.
+// { x, y } (line ends at a fixed court point). `curveHandle` is a 2D offset
+// { alongFt, perpFt } of the curve's handle point from the straight
+// start→end chord's own midpoint, measured along the chord's own axes
+// (alongFt: toward end when positive; perpFt: perpendicular) — both 0
+// means straight. Letting the handle move along the chord (not just
+// perpendicular) is what allows a "mostly straight, bends near one end"
+// shape instead of only a symmetric arch.
 function createLine(type, originTokenId, end) {
   return {
     id: crypto.randomUUID(),
@@ -20,7 +23,7 @@ function createLine(type, originTokenId, end) {
     originTokenId,
     endTokenId: end.tokenId || null,
     endPoint: end.tokenId ? null : { x: end.x, y: end.y },
-    curveOffsetFt: 0,
+    curveHandle: { alongFt: 0, perpFt: 0 },
   };
 }
 
@@ -39,61 +42,91 @@ function resolveLineEndpoints(line, tokens) {
   return { start: { x: origin.x, y: origin.y }, end: line.endPoint };
 }
 
-// Offsets the midpoint of start→end perpendicular to that axis by
-// distFt. Shared by the on-curve handle point and the raw Bézier control
-// point below, which are related but not equal — see resolveControlPoint.
-function offsetPointFt(startFt, endFt, distFt) {
-  const midFt = { x: (startFt.x + endFt.x) / 2, y: (startFt.y + endFt.y) / 2 };
+// The start→end chord's own local coordinate frame: a unit vector along it
+// (ux,uy), a unit vector perpendicular to it (px,py), its midpoint, and
+// half its length. Everything about a line's curve handle is expressed
+// relative to this frame, so it stays sensible as the chord itself moves
+// (e.g. when an attached token is dragged).
+function chordBasis(startFt, endFt) {
   const dx = endFt.x - startFt.x;
   const dy = endFt.y - startFt.y;
   const length = Math.hypot(dx, dy);
-  if (length === 0 || !distFt) return midFt;
-  const px = -dy / length;
-  const py = dx / length;
-  return { x: midFt.x + px * distFt, y: midFt.y + py * distFt };
-}
-
-// curveOffsetFt is defined as the perpendicular distance (from the
-// straight start→end chord) of the point the visible curve actually
-// passes through at its midpoint (t=0.5) — i.e. what the user sees and
-// drags. For a quadratic Bézier, B(0.5) = 0.5*chordMidpoint + 0.5*M, so
-// hitting an on-curve offset of curveOffsetFt requires the *raw* control
-// point M to be offset by curveOffsetFt*2. curveOffsetFt=0 still collapses
-// this exactly onto the midpoint, so it renders/hit-tests identically to
-// a straight line.
-function resolveControlPoint(startFt, endFt, curveOffsetFt) {
-  return offsetPointFt(startFt, endFt, (curveOffsetFt || 0) * 2);
-}
-
-// Given a pointer position, finds the curveOffsetFt (on-curve, not raw
-// control-point offset — see resolveControlPoint) that would make the
-// curve pass through the projection of that pointer. Used while dragging
-// a line's curve handle.
-function perpendicularOffset(startFt, endFt, pointFt) {
-  const dx = endFt.x - startFt.x;
-  const dy = endFt.y - startFt.y;
-  const length = Math.hypot(dx, dy);
-  if (length === 0) return 0;
-  const px = -dy / length;
-  const py = dx / length;
-  return (pointFt.x - startFt.x) * px + (pointFt.y - startFt.y) * py;
-}
-
-function quadraticPoint(startFt, controlFt, endFt, t) {
-  const mt = 1 - t;
+  if (length === 0) return null;
   return {
-    x: mt * mt * startFt.x + 2 * mt * t * controlFt.x + t * t * endFt.x,
-    y: mt * mt * startFt.y + 2 * mt * t * controlFt.y + t * t * endFt.y,
+    ux: dx / length,
+    uy: dy / length,
+    px: -dy / length,
+    py: dx / length,
+    midFt: { x: (startFt.x + endFt.x) / 2, y: (startFt.y + endFt.y) / 2 },
+    halfLenFt: length / 2,
   };
 }
 
-// Samples a quadratic Bézier curve from start to end via controlFt. When
-// controlFt is exactly the start→end midpoint this reduces mathematically
-// to the straight line between them, so curveOffsetFt=0 renders/hit-tests
-// identically to the old plain-line behavior.
-function bezierSamplePoints(startFt, controlFt, endFt, steps = 20) {
+const DEFAULT_CURVE_HANDLE = { alongFt: 0, perpFt: 0 };
+
+// The curve handle's actual court-space position: the chord's midpoint,
+// shifted alongFt along the chord and perpFt across it. Because this is
+// exactly where the interpolating Catmull-Rom curve (see
+// catmullRomSamplePoints) is built to pass through, the handle always sits
+// precisely on the visible curve — no separate "raw control point" needed.
+function resolveHandlePointFt(startFt, endFt, curveHandle) {
+  const basis = chordBasis(startFt, endFt);
+  if (!basis) return { x: (startFt.x + endFt.x) / 2, y: (startFt.y + endFt.y) / 2 };
+  const { midFt, ux, uy, px, py } = basis;
+  const { alongFt, perpFt } = curveHandle || DEFAULT_CURVE_HANDLE;
+  return { x: midFt.x + ux * alongFt + px * perpFt, y: midFt.y + uy * alongFt + py * perpFt };
+}
+
+// Inverse of resolveHandlePointFt: given a pointer position, finds the
+// { alongFt, perpFt } that would place the curve handle there. Used while
+// dragging a line's curve handle. Clamps alongFt so the handle can't reach
+// all the way to (or past) start/end, which would degenerate the curve.
+function offsetFromChord(startFt, endFt, pointFt) {
+  const basis = chordBasis(startFt, endFt);
+  if (!basis) return { alongFt: 0, perpFt: 0 };
+  const { midFt, ux, uy, px, py, halfLenFt } = basis;
+  const relX = pointFt.x - midFt.x;
+  const relY = pointFt.y - midFt.y;
+  const maxAlongFt = halfLenFt * 0.9;
+  const alongFt = Math.max(-maxAlongFt, Math.min(maxAlongFt, relX * ux + relY * uy));
+  const perpFt = relX * px + relY * py;
+  return { alongFt, perpFt };
+}
+
+function reflectAcross(pivotFt, pointFt) {
+  return { x: 2 * pivotFt.x - pointFt.x, y: 2 * pivotFt.y - pointFt.y };
+}
+
+// Catmull-Rom position at parameter t (0..1) between p1 and p2, using p0
+// and p3 as the neighboring points that shape the tangents. p(0) = p1 and
+// p(1) = p2 exactly.
+function catmullRomPoint(p0, p1, p2, p3, t) {
+  const t2 = t * t;
+  const t3 = t2 * t;
+  return {
+    x: 0.5 * ((2 * p1.x) + (-p0.x + p2.x) * t + (2 * p0.x - 5 * p1.x + 4 * p2.x - p3.x) * t2 + (-p0.x + 3 * p1.x - 3 * p2.x + p3.x) * t3),
+    y: 0.5 * ((2 * p1.y) + (-p0.y + p2.y) * t + (2 * p0.y - 5 * p1.y + 4 * p2.y - p3.y) * t2 + (-p0.y + 3 * p1.y - 3 * p2.y + p3.y) * t3),
+  };
+}
+
+// Samples a Catmull-Rom spline that interpolates exactly through
+// startFt -> handleFt -> endFt (two segments), synthesizing tangent-shaping
+// "phantom" points before startFt and after endFt by reflecting handleFt
+// across each. When handleFt is exactly the chord's midpoint, all five
+// points (phantom, start, handle, end, phantom) are collinear and evenly
+// spaced, which makes Catmull-Rom reduce to the straight line between
+// start and end — so a curveHandle of {0,0} still renders/hit-tests
+// identically to a plain straight line.
+function catmullRomSamplePoints(startFt, handleFt, endFt, stepsPerSegment = 20) {
+  const beforeFt = reflectAcross(startFt, handleFt);
+  const afterFt = reflectAcross(endFt, handleFt);
   const points = [];
-  for (let i = 0; i <= steps; i++) points.push(quadraticPoint(startFt, controlFt, endFt, i / steps));
+  for (let i = 0; i <= stepsPerSegment; i++) {
+    points.push(catmullRomPoint(beforeFt, startFt, handleFt, endFt, i / stepsPerSegment));
+  }
+  for (let i = 1; i <= stepsPerSegment; i++) {
+    points.push(catmullRomPoint(startFt, handleFt, endFt, afterFt, i / stepsPerSegment));
+  }
   return points;
 }
 
@@ -108,39 +141,8 @@ function distanceToSegment(px, py, ax, ay, bx, by) {
   return Math.hypot(px - cx, py - cy);
 }
 
-// Samples a sine-wave "squiggle" path between two court-space points, used
-// to draw dribble lines. Pure geometry so it's unit-testable without a
-// canvas.
-function squigglePoints(startFt, endFt, amplitudeFt = 0.6, waveLengthFt = 3) {
-  const dx = endFt.x - startFt.x;
-  const dy = endFt.y - startFt.y;
-  const length = Math.hypot(dx, dy);
-  if (length === 0) return [startFt, endFt];
-  const ux = dx / length;
-  const uy = dy / length;
-  // Perpendicular unit vector.
-  const px = -uy;
-  const py = ux;
-  const steps = Math.max(8, Math.round(length / (waveLengthFt / 8)));
-  const points = [];
-  for (let i = 0; i <= steps; i++) {
-    const t = i / steps;
-    const alongFt = t * length;
-    // Taper the wave to zero at both ends (sin(t*PI)) so the path always
-    // starts/ends exactly on startFt/endFt, regardless of how the overall
-    // length divides into wavelengths.
-    const taper = Math.sin(t * Math.PI);
-    const offset = amplitudeFt * Math.sin((alongFt / waveLengthFt) * Math.PI * 2) * taper;
-    points.push({
-      x: startFt.x + ux * alongFt + px * offset,
-      y: startFt.y + uy * alongFt + py * offset,
-    });
-  }
-  return points;
-}
-
-// Same idea as squigglePoints, but the wave rides along an arbitrary
-// sampled baseline (e.g. a curved Bézier path) instead of a straight
+// Same idea as squigglePoints below, but the wave rides along an arbitrary
+// sampled baseline (e.g. a curved Catmull-Rom path) instead of a straight
 // start→end axis — used to draw a dribble line that's also been bent via
 // its curve handle. Waves/tapers by cumulative arc length along the
 // baseline, and offsets each sample perpendicular to its local tangent
@@ -170,33 +172,43 @@ function squiggleAlongBase(baseFt, amplitudeFt = 0.6, waveLengthFt = 3) {
   });
 }
 
-// Returns the geometric path (in feet, start→end) used to render/hit-test
-// a line: a quadratic curve for cut/pass/screen (curveOffsetFt=0 renders as
-// a straight line), or the dribble squiggle — which itself rides along a
-// curved baseline once curveOffsetFt is non-zero (see squiggleAlongBase).
-function linePathPoints(line, pts) {
-  const curveOffsetFt = line.curveOffsetFt || 0;
-  if (line.type === LINE_TYPES.DRIBBLE) {
-    if (!curveOffsetFt) return squigglePoints(pts.start, pts.end);
-    const controlFt = resolveControlPoint(pts.start, pts.end, curveOffsetFt);
-    const chordLenFt = Math.hypot(pts.end.x - pts.start.x, pts.end.y - pts.start.y);
-    const baseSteps = Math.max(24, Math.round(chordLenFt / (3 / 8)));
-    return squiggleAlongBase(bezierSamplePoints(pts.start, controlFt, pts.end, baseSteps));
+// Kept as a standalone helper (used directly by a regression test and
+// available for any straight-baseline squiggle needs) — equivalent to
+// squiggleAlongBase() over a plain two-point straight path.
+function squigglePoints(startFt, endFt, amplitudeFt = 0.6, waveLengthFt = 3) {
+  const length = Math.hypot(endFt.x - startFt.x, endFt.y - startFt.y);
+  if (length === 0) return [startFt, endFt];
+  const steps = Math.max(8, Math.round(length / (waveLengthFt / 8)));
+  const baseFt = [];
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    baseFt.push({ x: startFt.x + (endFt.x - startFt.x) * t, y: startFt.y + (endFt.y - startFt.y) * t });
   }
-  const controlFt = resolveControlPoint(pts.start, pts.end, curveOffsetFt);
-  return bezierSamplePoints(pts.start, controlFt, pts.end);
+  return squiggleAlongBase(baseFt, amplitudeFt, waveLengthFt);
 }
 
-// The curve handle's court-space position for a line. This is the point
-// the visible curve/baseline actually passes through (see
-// resolveControlPoint's doc comment), not the raw Bézier control point, so
-// the handle sits exactly on the curve the user sees and drags
-// intuitively — including for dribble lines, whose squiggle rides along
-// this same bent baseline.
+// Returns the geometric path (in feet, start→end) used to render/hit-test
+// a line: a Catmull-Rom curve through start/handle/end for cut/pass/screen
+// (curveHandle={0,0} renders as a straight line), or the dribble squiggle
+// riding along that same curved baseline.
+function linePathPoints(line, pts) {
+  const curveHandle = line.curveHandle || DEFAULT_CURVE_HANDLE;
+  const handleFt = resolveHandlePointFt(pts.start, pts.end, curveHandle);
+  if (line.type === LINE_TYPES.DRIBBLE) {
+    const chordLenFt = Math.hypot(pts.end.x - pts.start.x, pts.end.y - pts.start.y);
+    const stepsPerSegment = Math.max(16, Math.round(chordLenFt / (3 / 8) / 2));
+    return squiggleAlongBase(catmullRomSamplePoints(pts.start, handleFt, pts.end, stepsPerSegment));
+  }
+  return catmullRomSamplePoints(pts.start, handleFt, pts.end);
+}
+
+// The curve handle's court-space position for a line — see
+// resolveHandlePointFt. Used both to render the handle and to hit-test
+// grabbing it.
 function lineControlPointFt(line, tokens) {
   const pts = resolveLineEndpoints(line, tokens);
   if (!pts) return null;
-  return offsetPointFt(pts.start, pts.end, line.curveOffsetFt || 0);
+  return resolveHandlePointFt(pts.start, pts.end, line.curveHandle || DEFAULT_CURVE_HANDLE);
 }
 
 // Shortens a sampled path by pullBackFt, measured back from its last point
