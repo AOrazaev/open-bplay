@@ -54,9 +54,9 @@ test.describe('Checkpoint 3 — draw movement lines', () => {
 
     // Moving the origin token should move the line with it (endpoints are
     // resolved live from token positions, not baked in at creation time).
-    // Switch back to move mode first — otherwise this drag would draw
-    // another line instead of relocating the token.
-    await page.locator('.tool-btn[data-tool="cut"]').click();
+    // The tool auto-deselects after a successful draw, so this next drag
+    // is already back in move mode.
+    await expect(page.locator('.tool-btn[data-tool="cut"]')).not.toHaveClass(/active/);
     await dragFromTokenTo(page, 0, 15, 25);
     const originPos = await page.evaluate(() => ({ x: tokens[0].x, y: tokens[0].y }));
     expect(originPos.x).toBeCloseTo(15, 0);
@@ -84,13 +84,34 @@ test.describe('Checkpoint 3 — draw movement lines', () => {
 
     await page.locator('.tool-btn[data-tool="screen"]').click();
     await dragFromTokenTo(page, 0, 40, 10);
-    await page.locator('.tool-btn[data-tool="screen"]').click(); // toggle back to move mode
+    // Tool auto-deselects after a successful draw, so no toggle-off click
+    // is needed before selecting the next tool.
 
     await page.locator('.tool-btn[data-tool="dribble"]').click();
     await dragFromTokenTo(page, 1, 20, 35);
 
     const types = await page.evaluate(() => lines.map(l => l.type));
     expect(types).toEqual(['screen', 'dribble']);
+  });
+
+  test('the tool auto-deselects after drawing a line, preventing an accidental second line', async ({ page }) => {
+    await page.goto('/');
+    await spawnTokenAt(page, 'offense', 10, 30);
+    await spawnTokenAt(page, 'offense', 30, 10);
+
+    await page.locator('.tool-btn[data-tool="pass"]').click();
+    await dragFromTokenTo(page, 0, 30, 10);
+    await expect.poll(() => page.evaluate(() => lines.length)).toBe(1);
+    await expect(page.locator('.tool-btn[data-tool="pass"]')).not.toHaveClass(/active/);
+
+    // With no tool active, dragging the same token now just moves it
+    // instead of drawing a second line.
+    await dragFromTokenTo(page, 0, 20, 20);
+    const lineCount = await page.evaluate(() => lines.length);
+    const tokenPos = await page.evaluate(() => ({ x: tokens[0].x, y: tokens[0].y }));
+    expect(lineCount).toBe(1);
+    expect(tokenPos.x).toBeCloseTo(20, 0);
+    expect(tokenPos.y).toBeCloseTo(20, 0);
   });
 
   test('clicking the active tool again returns to move mode', async ({ page }) => {
@@ -136,7 +157,8 @@ test.describe('Checkpoint 3 — draw movement lines', () => {
     await page.locator('.tool-btn[data-tool="cut"]').click();
     await dragFromTokenTo(page, 0, 30, 10);
     await expect.poll(() => page.evaluate(() => lines.length)).toBe(1);
-    await page.locator('.tool-btn[data-tool="cut"]').click(); // back to move mode
+    // Tool auto-deselects after the draw above, so we're already back in
+    // move mode for the double-click below.
 
     const point = await page.evaluate(() => {
       const canvas = document.querySelector('#courtCanvas');

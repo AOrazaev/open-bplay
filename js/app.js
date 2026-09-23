@@ -165,6 +165,10 @@ function endDrag(e) {
       const end = targetToken ? { x: targetToken.x, y: targetToken.y } : current;
       if (Math.hypot(end.x - origin.x, end.y - origin.y) >= MIN_LINE_LENGTH_FT) {
         lines.push(createLine(type, originTokenId, targetToken ? { tokenId: targetToken.id } : current));
+        // Auto-deselect the tool after a successful draw so the user
+        // doesn't accidentally start a second line on their next drag.
+        activeTool = null;
+        updateToolPalette();
       }
     }
     redraw();
