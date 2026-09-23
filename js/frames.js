@@ -12,6 +12,43 @@ function cloneFrame(frame) {
   return { tokens: structuredClone(frame.tokens), lines: structuredClone(frame.lines) };
 }
 
+// Builds the *next* frame's starting point by applying every line drawn
+// in `frame` as a movement, rather than just duplicating positions
+// as-is (that's what plain "+ Frame" does). A cut/dribble/screen line
+// moves its own origin token to the line's endpoint — that's the player
+// performing the action. A pass line instead moves the ball token (only
+// when there's exactly one on the court — otherwise there's no
+// unambiguous "the ball" to move) to the endpoint, since a pass is the
+// ball changing hands, not the passer relocating. Tokens with no line
+// keep their position (e.g. a defender who didn't move, or the ball
+// when nothing passed it). The new frame starts with no lines of its
+// own — those describe the transition *into* it, not out of it — ready
+// for the next step to be drawn fresh.
+function advanceFrameByArrows(frame) {
+  const newTokens = structuredClone(frame.tokens);
+  const tokensById = new Map(newTokens.map(t => [t.id, t]));
+
+  frame.lines.forEach(line => {
+    const pts = resolveLineEndpoints(line, frame.tokens);
+    if (!pts) return;
+    if (line.type === LINE_TYPES.PASS) {
+      const ballTokens = newTokens.filter(t => t.type === TOKEN_TYPES.BALL);
+      if (ballTokens.length === 1) {
+        ballTokens[0].x = pts.end.x;
+        ballTokens[0].y = pts.end.y;
+      }
+      return;
+    }
+    const mover = tokensById.get(line.originTokenId);
+    if (mover) {
+      mover.x = pts.end.x;
+      mover.y = pts.end.y;
+    }
+  });
+
+  return { tokens: newTokens, lines: [] };
+}
+
 // Accepts whatever a legacy (pre-frames) single-snapshot shape or the
 // current frames-array shape looks like, and always returns a valid
 // { frames, currentFrameIndex } — used by both the court autosave and

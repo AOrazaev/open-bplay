@@ -2,11 +2,14 @@
 // sequence, add/delete frames, and preview it as an animated playback.
 // Depends on globals declared in app.js (frames, currentFrameIndex,
 // tokens, lines, syncCurrentFrame, persistCourtState, resetInteractionState,
-// redraw, playbackTokens) and on the pure helpers in js/frames.js.
+// redraw, playbackTokens) and on the pure helpers in js/frames.js
+// (cloneFrame, advanceFrameByArrows, frameTransitionDurationMs,
+// interpolateFrameTokens).
 
 const prevFrameBtn = document.querySelector('#prevFrameBtn');
 const nextFrameBtn = document.querySelector('#nextFrameBtn');
 const addFrameBtn = document.querySelector('#addFrameBtn');
+const advanceFrameBtn = document.querySelector('#advanceFrameBtn');
 const deleteFrameBtn = document.querySelector('#deleteFrameBtn');
 const playFramesBtn = document.querySelector('#playFramesBtn');
 const frameLabelEl = document.querySelector('#frameLabel');
@@ -27,6 +30,8 @@ function updateFrameBar() {
   nextFrameBtn.disabled = isPlaying() || currentFrameIndex === frames.length - 1;
   deleteFrameBtn.disabled = isPlaying() || frames.length <= 1;
   addFrameBtn.disabled = isPlaying();
+  // Only meaningful once at least one arrow has been drawn on this frame.
+  advanceFrameBtn.disabled = isPlaying() || lines.length === 0;
   playFramesBtn.disabled = isPlaying() ? false : frames.length <= 1;
 }
 
@@ -65,6 +70,14 @@ addFrameBtn.addEventListener('click', () => {
   syncCurrentFrame();
   const duplicated = cloneFrame(frames[currentFrameIndex]);
   frames.splice(currentFrameIndex + 1, 0, duplicated);
+  goToFrame(currentFrameIndex + 1);
+});
+
+advanceFrameBtn.addEventListener('click', () => {
+  if (lines.length === 0) return;
+  syncCurrentFrame();
+  const advanced = advanceFrameByArrows(frames[currentFrameIndex]);
+  frames.splice(currentFrameIndex + 1, 0, advanced);
   goToFrame(currentFrameIndex + 1);
 });
 

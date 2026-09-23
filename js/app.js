@@ -541,6 +541,7 @@ function endDrag(e) {
         activeTool = null;
         updateToolPalette();
         persistCourtState();
+        updateFrameBar(); // Apply Arrows becomes available once a line exists
       }
     }
     redraw();
@@ -576,6 +577,7 @@ courtCanvas.addEventListener('dblclick', (e) => {
     if (selectedLineId === hitLine.id) selectedLineId = null;
     lines = lines.filter(l => l.id !== hitLine.id);
     persistCourtState();
+    updateFrameBar(); // Apply Arrows may become disabled again if that was the last line
     redraw();
   }
 });

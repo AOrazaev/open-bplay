@@ -189,4 +189,92 @@ test.describe('Checkpoint 6 — multi-step plays (frames)', () => {
     expect(result.longX).toBeGreaterThan(0);
     expect(result.longX).toBeLessThan(40); // still travelling
   });
+
+  test('Apply Arrows is disabled until the current frame has at least one line', async ({ page }) => {
+    await page.goto('/');
+    await spawnTokenAt(page, 'offense', 10, 30);
+    await expect(page.locator('#advanceFrameBtn')).toBeDisabled();
+
+    await page.locator('.tool-btn[data-tool="cut"]').click();
+    const start = await page.evaluate(() => {
+      const canvas = document.querySelector('#courtCanvas');
+      return courtFeetToClientPoint(canvas, tokens[0].x, tokens[0].y);
+    });
+    const target = await page.evaluate(() => {
+      const canvas = document.querySelector('#courtCanvas');
+      return courtFeetToClientPoint(canvas, 30, 20);
+    });
+    await page.mouse.move(start.x, start.y);
+    await page.mouse.down();
+    await page.mouse.move(target.x, target.y, { steps: 5 });
+    await page.mouse.up();
+
+    await expect(page.locator('#advanceFrameBtn')).toBeEnabled();
+  });
+
+  test('Apply Arrows creates a new frame with the origin token moved to its cut/dribble arrow endpoint', async ({ page }) => {
+    await page.goto('/');
+    await spawnTokenAt(page, 'offense', 10, 30);
+
+    await page.locator('.tool-btn[data-tool="cut"]').click();
+    const start = await page.evaluate(() => {
+      const canvas = document.querySelector('#courtCanvas');
+      return courtFeetToClientPoint(canvas, tokens[0].x, tokens[0].y);
+    });
+    const target = await page.evaluate(() => {
+      const canvas = document.querySelector('#courtCanvas');
+      return courtFeetToClientPoint(canvas, 30, 20);
+    });
+    await page.mouse.move(start.x, start.y);
+    await page.mouse.down();
+    await page.mouse.move(target.x, target.y, { steps: 5 });
+    await page.mouse.up();
+
+    await page.click('#advanceFrameBtn');
+    await expect(page.locator('#frameLabel')).toHaveText('Frame 2 of 2');
+
+    const state = await page.evaluate(() => ({
+      pos: { x: tokens[0].x, y: tokens[0].y },
+      lineCount: lines.length,
+    }));
+    expect(state.pos.x).toBeCloseTo(30, 0);
+    expect(state.pos.y).toBeCloseTo(20, 0);
+    // The new frame starts blank, ready for the next step to be drawn.
+    expect(state.lineCount).toBe(0);
+  });
+
+  test('Apply Arrows moves the ball (not the passer) along a pass line', async ({ page }) => {
+    await page.goto('/');
+    await spawnTokenAt(page, 'offense', 10, 30); // passer
+    await spawnTokenAt(page, 'offense', 30, 20); // receiver
+    await spawnTokenAt(page, 'ball', 10, 30); // ball starts with the passer
+
+    await page.locator('.tool-btn[data-tool="pass"]').click();
+    const start = await page.evaluate(() => {
+      const canvas = document.querySelector('#courtCanvas');
+      return courtFeetToClientPoint(canvas, tokens[0].x, tokens[0].y);
+    });
+    const target = await page.evaluate(() => {
+      const canvas = document.querySelector('#courtCanvas');
+      return courtFeetToClientPoint(canvas, tokens[1].x, tokens[1].y);
+    });
+    await page.mouse.move(start.x, start.y);
+    await page.mouse.down();
+    await page.mouse.move(target.x, target.y, { steps: 5 });
+    await page.mouse.up();
+
+    await page.click('#advanceFrameBtn');
+    await expect(page.locator('#frameLabel')).toHaveText('Frame 2 of 2');
+
+    const state = await page.evaluate(() => {
+      const ball = tokens.find(t => t.type === 'ball');
+      const passer = tokens.find(t => t.label === '1');
+      return { ball: { x: ball.x, y: ball.y }, passer: { x: passer.x, y: passer.y } };
+    });
+    // The ball moved to the receiver's spot; the passer stayed put.
+    expect(state.ball.x).toBeCloseTo(30, 0);
+    expect(state.ball.y).toBeCloseTo(20, 0);
+    expect(state.passer.x).toBeCloseTo(10, 0);
+    expect(state.passer.y).toBeCloseTo(30, 0);
+  });
 });
