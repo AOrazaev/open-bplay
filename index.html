@@ -14,17 +14,18 @@
   <div class="app-layout">
     <aside class="sidebar" id="playsSidebar">
       <h2 class="sidebar-title">Plays</h2>
-      <p class="sidebar-hint">Name a play and save it, then pick a saved one to load or delete.</p>
+      <p class="sidebar-hint">Organize plays into folders. Click a folder to select it as the save location; double-click a name to rename it.</p>
+
+      <div class="plays-toolbar">
+        <span class="plays-location" id="playsLocation">Saving to: Root</span>
+        <button id="newFolderBtn" class="secondary" title="New folder here">+ Folder</button>
+      </div>
+
+      <ul class="plays-tree" id="playsTree"></ul>
+
       <div class="plays-save-row">
         <input id="playNameInput" type="text" placeholder="Play name" maxlength="60" aria-label="Play name" />
         <button id="savePlayBtn">Save</button>
-      </div>
-      <select id="savedPlaysSelect" aria-label="Saved plays" size="6">
-        <option value="" disabled selected>No saved plays</option>
-      </select>
-      <div class="plays-actions">
-        <button id="loadPlayBtn" class="secondary" disabled>Load</button>
-        <button id="deletePlayBtn" class="secondary" disabled>Delete</button>
       </div>
     </aside>
 

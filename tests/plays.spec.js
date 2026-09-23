@@ -33,109 +33,193 @@ async function dragFromTokenTo(page, tokenIndex, xFt, yFt) {
   await page.mouse.up();
 }
 
-test.describe('Checkpoint 4 — save/load plays (localStorage)', () => {
+// Saves the current court under `name` via the sidebar's Save button.
+async function savePlay(page, name) {
+  await page.fill('#playNameInput', name);
+  await page.click('#savePlayBtn');
+}
+
+// Clicks "+ Folder", types `name` into the inline rename input that
+// appears, commits it with Enter, then clicks the new folder's name to
+// select it as the current save location (creating a folder does not
+// auto-select it — that's a separate, explicit action).
+async function createFolder(page, name) {
+  await page.click('#newFolderBtn');
+  const input = page.locator('.rename-input');
+  await input.fill(name);
+  await input.press('Enter');
+  await page.locator('.folder-name', { hasText: name }).click();
+}
+
+function folderRow(page, name) {
+  return page.locator('.plays-tree-row').filter({ has: page.locator('.folder-name', { hasText: name }) });
+}
+
+function playRow(page, name) {
+  return page.locator('.plays-tree-row').filter({ has: page.locator('.play-name', { hasText: name }) });
+}
+
+test.describe('Checkpoint 4 — save/load plays in a nested folder hierarchy', () => {
   test.use({ viewport: { width: 900, height: 1000 } });
 
-  test('saving a play adds it to the list, and it is the only option available to load', async ({ page }) => {
+  test('saving a play with no folder selected adds it at the root of the tree', async ({ page }) => {
     await page.goto('/');
     await spawnTokenAt(page, 'offense', 10, 30);
-    await spawnTokenAt(page, 'offense', 30, 20);
+    await savePlay(page, 'Horns Set');
 
-    await page.fill('#playNameInput', 'Horns Set');
-    await page.click('#savePlayBtn');
-
-    const options = await page.locator('#savedPlaysSelect option').allTextContents();
-    expect(options).toEqual(['Horns Set']);
-    await expect(page.locator('#loadPlayBtn')).toBeEnabled();
-    await expect(page.locator('#deletePlayBtn')).toBeEnabled();
+    await expect(playRow(page, 'Horns Set')).toBeVisible();
+    const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('play-drawing-saved-plays-v1')));
+    expect(saved).toHaveLength(1);
+    expect(saved[0]).toMatchObject({ type: 'play', name: 'Horns Set', parentId: null });
   });
 
-  test('loading a saved play restores its tokens and lines, replacing the current court', async ({ page }) => {
+  test('creating a folder adds it to the tree and selects it as the save location', async ({ page }) => {
     await page.goto('/');
+    await createFolder(page, 'Sets');
+
+    await expect(folderRow(page, 'Sets')).toBeVisible();
+    await expect(folderRow(page, 'Sets')).toHaveClass(/current/);
+    await expect(page.locator('#playsLocation')).toHaveText('Saving to: Root / Sets');
+  });
+
+  test('saving a play while a folder is selected nests it under that folder', async ({ page }) => {
+    await page.goto('/');
+    await createFolder(page, 'Sets');
+    await spawnTokenAt(page, 'offense', 10, 30);
+    await savePlay(page, 'Horns');
+
+    // The play should render nested inside the folder's own child list,
+    // not at the tree root.
+    const nestedPlay = page.locator('.plays-tree-children .play-name', { hasText: 'Horns' });
+    await expect(nestedPlay).toBeVisible();
+
+    const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('play-drawing-saved-plays-v1')));
+    const folder = saved.find(e => e.type === 'folder' && e.name === 'Sets');
+    const play = saved.find(e => e.type === 'play' && e.name === 'Horns');
+    expect(play.parentId).toBe(folder.id);
+  });
+
+  test('folders can be nested inside other folders', async ({ page }) => {
+    await page.goto('/');
+    await createFolder(page, 'Sets');
+    // The "+" button on the "Sets" folder row creates a subfolder inside
+    // it (and selects "Sets" itself as the destination, since that's the
+    // folder the new subfolder is being created in).
+    await folderRow(page, 'Sets').locator('.add-subfolder-btn').click();
+    const input = page.locator('.rename-input');
+    await input.fill('Horns Variants');
+    await input.press('Enter');
+    await expect(page.locator('#playsLocation')).toHaveText('Saving to: Root / Sets');
+
+    // Selecting the new subfolder by name moves the save location into it.
+    await page.locator('.folder-name', { hasText: 'Horns Variants' }).click();
+    await expect(page.locator('#playsLocation')).toHaveText('Saving to: Root / Sets / Horns Variants');
+    const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('play-drawing-saved-plays-v1')));
+    const parent = saved.find(e => e.name === 'Sets');
+    const child = saved.find(e => e.name === 'Horns Variants');
+    expect(child.parentId).toBe(parent.id);
+  });
+
+  test('loading a play nested in a folder restores its tokens and re-selects that folder', async ({ page }) => {
+    await page.goto('/');
+    await createFolder(page, 'Sets');
     await spawnTokenAt(page, 'offense', 10, 30);
     await spawnTokenAt(page, 'offense', 30, 20);
-    await page.locator('.tool-btn[data-tool="pass"]').click();
-    await dragFromTokenTo(page, 0, 30, 20); // pass from token 0 to token 1 (attaches)
-    await expect.poll(() => page.evaluate(() => lines.length)).toBe(1);
+    await savePlay(page, 'Horns');
 
-    await page.fill('#playNameInput', 'Two Man Game');
-    await page.click('#savePlayBtn');
-
-    // Clear the court, then load the saved play back.
     await page.click('#clearCourt');
     await expect.poll(() => page.evaluate(() => tokens.length)).toBe(0);
-    await expect.poll(() => page.evaluate(() => lines.length)).toBe(0);
 
-    await page.selectOption('#savedPlaysSelect', { label: 'Two Man Game' });
-    await page.click('#loadPlayBtn');
+    await playRow(page, 'Horns').locator('.play-name').click();
 
-    const restored = await page.evaluate(() => ({
-      tokenCount: tokens.length,
-      lineCount: lines.length,
-      lineAttached: lines[0] && lines[0].endTokenId != null,
-    }));
-    expect(restored.tokenCount).toBe(2);
-    expect(restored.lineCount).toBe(1);
-    expect(restored.lineAttached).toBe(true);
-    // The name field should reflect what was just loaded, so re-saving
-    // updates the same play instead of prompting for a new name.
-    await expect(page.locator('#playNameInput')).toHaveValue('Two Man Game');
-  });
-
-  test('saving again under the same name overwrites the play instead of duplicating it', async ({ page }) => {
-    await page.goto('/');
-    await spawnTokenAt(page, 'offense', 10, 30);
-    await page.fill('#playNameInput', 'Iso');
-    await page.click('#savePlayBtn');
-
-    await spawnTokenAt(page, 'offense', 20, 20);
-    await page.fill('#playNameInput', 'Iso');
-    await page.click('#savePlayBtn');
-
-    const options = await page.locator('#savedPlaysSelect option').allTextContents();
-    expect(options).toEqual(['Iso']);
-    const tokenCount = await page.evaluate(() => {
-      const saved = JSON.parse(localStorage.getItem('play-drawing-saved-plays-v1'));
-      return saved[0].tokens.length;
-    });
+    const tokenCount = await page.evaluate(() => tokens.length);
     expect(tokenCount).toBe(2);
+    await expect(page.locator('#playNameInput')).toHaveValue('Horns');
+    // Loading a play re-selects its parent folder as the save location,
+    // so re-saving (e.g. after a tweak) lands back in the same folder.
+    await expect(page.locator('#playsLocation')).toHaveText('Saving to: Root / Sets');
   });
 
-  test('deleting a saved play removes it from the list and localStorage', async ({ page }) => {
+  test('deleting a folder cascades to everything nested inside it', async ({ page }) => {
     await page.goto('/');
+    await createFolder(page, 'Sets');
     await spawnTokenAt(page, 'offense', 10, 30);
-    await page.fill('#playNameInput', 'Temp Play');
-    await page.click('#savePlayBtn');
-    await expect.poll(() => page.locator('#savedPlaysSelect option').count()).toBe(1);
+    await savePlay(page, 'Horns');
 
-    await page.selectOption('#savedPlaysSelect', { label: 'Temp Play' });
-    await page.click('#deletePlayBtn');
+    await folderRow(page, 'Sets').locator('.delete-btn').click();
 
-    const options = await page.locator('#savedPlaysSelect option').allTextContents();
-    expect(options).toEqual(['No saved plays']);
-    await expect(page.locator('#loadPlayBtn')).toBeDisabled();
-    await expect(page.locator('#deletePlayBtn')).toBeDisabled();
+    await expect(folderRow(page, 'Sets')).toHaveCount(0);
+    await expect(playRow(page, 'Horns')).toHaveCount(0);
     const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('play-drawing-saved-plays-v1')));
     expect(saved).toEqual([]);
+    // The save location should have stepped back up to the root, since
+    // the folder it pointed at no longer exists.
+    await expect(page.locator('#playsLocation')).toHaveText('Saving to: Root');
   });
 
-  test('saved plays persist across a page reload', async ({ page }) => {
+  test('double-clicking a name renames it in place', async ({ page }) => {
+    await page.goto('/');
+    await createFolder(page, 'Sets');
+    // Dispatched directly (rather than a real two-click gesture) because
+    // the single-click "select folder" handler re-renders the tree on
+    // every click, including the first click of the pair — that DOM swap
+    // makes a real hardware-style double-click racy in a headless browser.
+    await folderRow(page, 'Sets').locator('.folder-name').dispatchEvent('dblclick');
+    const input = page.locator('.rename-input');
+    await input.fill('Play Sets');
+    await input.press('Enter');
+
+    await expect(folderRow(page, 'Play Sets')).toBeVisible();
+    const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('play-drawing-saved-plays-v1')));
+    expect(saved[0].name).toBe('Play Sets');
+  });
+
+  test('saving again under the same name in the same folder overwrites instead of duplicating', async ({ page }) => {
     await page.goto('/');
     await spawnTokenAt(page, 'offense', 10, 30);
-    await spawnTokenAt(page, 'defense', 15, 30);
-    await page.fill('#playNameInput', 'Reload Test');
-    await page.click('#savePlayBtn');
+    await savePlay(page, 'Iso');
+
+    await spawnTokenAt(page, 'offense', 20, 20);
+    await savePlay(page, 'Iso');
+
+    await expect(page.locator('.play-name', { hasText: 'Iso' })).toHaveCount(1);
+    const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('play-drawing-saved-plays-v1')));
+    expect(saved).toHaveLength(1);
+    expect(saved[0].tokens).toHaveLength(2);
+  });
+
+  test('the same play name is allowed in two different folders', async ({ page }) => {
+    await page.goto('/');
+    await createFolder(page, 'Sets');
+    await spawnTokenAt(page, 'offense', 10, 30);
+    await savePlay(page, 'Iso');
+
+    // Creating a second folder also selects it as the current save
+    // location, so saving the same name there lands in a different
+    // folder than the first "Iso".
+    await createFolder(page, 'Other Sets');
+    await spawnTokenAt(page, 'offense', 20, 20);
+    await savePlay(page, 'Iso');
+
+    const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('play-drawing-saved-plays-v1')));
+    const isoPlays = saved.filter(e => e.type === 'play' && e.name === 'Iso');
+    expect(isoPlays).toHaveLength(2);
+    expect(new Set(isoPlays.map(p => p.parentId)).size).toBe(2);
+  });
+
+  test('the library, including folder structure, persists across a page reload', async ({ page }) => {
+    await page.goto('/');
+    await createFolder(page, 'Sets');
+    await spawnTokenAt(page, 'offense', 10, 30);
+    await savePlay(page, 'Horns');
 
     await page.reload();
-    const options = await page.locator('#savedPlaysSelect option').allTextContents();
-    expect(options).toEqual(['Reload Test']);
+    // Tree starts collapsed after reload, so the nested play isn't visible
+    // until its folder is expanded.
+    await expect(folderRow(page, 'Sets')).toBeVisible();
+    await expect(playRow(page, 'Horns')).toHaveCount(0);
 
-    await page.selectOption('#savedPlaysSelect', { label: 'Reload Test' });
-    await page.click('#loadPlayBtn');
-    const counts = await page.evaluate(() => ({
-      offense: tokens.filter(t => t.type === TOKEN_TYPES.OFFENSE).length,
-      defense: tokens.filter(t => t.type === TOKEN_TYPES.DEFENSE).length,
-    }));
-    expect(counts).toEqual({ offense: 1, defense: 1 });
+    await folderRow(page, 'Sets').locator('.toggle-btn').click();
+    await expect(playRow(page, 'Horns')).toBeVisible();
   });
 });

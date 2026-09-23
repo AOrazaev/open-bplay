@@ -8,9 +8,9 @@ const clearCourtBtn = document.querySelector('#clearCourt');
 const toolButtons = [...document.querySelectorAll('.tool-btn')];
 const playNameInput = document.querySelector('#playNameInput');
 const savePlayBtn = document.querySelector('#savePlayBtn');
-const savedPlaysSelect = document.querySelector('#savedPlaysSelect');
-const loadPlayBtn = document.querySelector('#loadPlayBtn');
-const deletePlayBtn = document.querySelector('#deletePlayBtn');
+const newFolderBtn = document.querySelector('#newFolderBtn');
+const playsLocationEl = document.querySelector('#playsLocation');
+const playsTreeEl = document.querySelector('#playsTree');
 
 let tokens = [];
 let lines = [];
@@ -123,73 +123,200 @@ clearCourtBtn.addEventListener('click', () => {
   redraw();
 });
 
-// --- Plays: save/load/delete named court snapshots (Checkpoint 4) -------
+// --- Plays: save/load/delete named plays, organized into folders -------
+// (Checkpoint 4, extended with a nestable folder hierarchy)
 
-let savedPlays = loadSavedPlays();
+let library = loadLibrary();
+// The folder new saves/subfolders land in — null means the library root.
+// Selected by clicking a folder's name in the tree.
+let currentFolderId = null;
+// Which folders are expanded in the tree. UI-only (not persisted) — a
+// reload always starts collapsed, which is a reasonable default and
+// keeps the persisted format free of view-state concerns.
+const expandedFolderIds = new Set();
 
-function refreshPlaysSelect(selectedId) {
-  const previousValue = selectedId !== undefined ? selectedId : savedPlaysSelect.value;
-  savedPlaysSelect.innerHTML = '';
-  if (savedPlays.length === 0) {
-    const option = document.createElement('option');
-    option.value = '';
-    option.textContent = 'No saved plays';
-    option.disabled = true;
-    option.selected = true;
-    savedPlaysSelect.appendChild(option);
-  } else {
-    [...savedPlays]
-      .sort((a, b) => a.name.localeCompare(b.name))
-      .forEach(play => {
-        const option = document.createElement('option');
-        option.value = play.id;
-        option.textContent = play.name;
-        savedPlaysSelect.appendChild(option);
-      });
-    if (previousValue && savedPlays.some(p => p.id === previousValue)) {
-      savedPlaysSelect.value = previousValue;
-    }
-  }
-  const hasSelection = savedPlaysSelect.value !== '';
-  loadPlayBtn.disabled = !hasSelection;
-  deletePlayBtn.disabled = !hasSelection;
+function updatePlaysLocationLabel() {
+  playsLocationEl.textContent = `Saving to: ${folderPath(library, currentFolderId).join(' / ')}`;
 }
 
-savedPlaysSelect.addEventListener('change', () => {
-  const hasSelection = savedPlaysSelect.value !== '';
-  loadPlayBtn.disabled = !hasSelection;
-  deletePlayBtn.disabled = !hasSelection;
-});
+// Creates a small text button used for the tree's inline icon actions
+// (expand/collapse, add-subfolder, delete) — kept as one helper so every
+// row builds them identically.
+function createTreeButton(className, label, ariaLabel, onClick) {
+  const btn = document.createElement('button');
+  btn.className = className;
+  btn.textContent = label;
+  btn.setAttribute('aria-label', ariaLabel);
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    onClick();
+  });
+  return btn;
+}
+
+// Swaps a folder/play row's name element for a text input pre-filled
+// with its current name, so the user can rename it in place (or, for a
+// freshly created folder, give it its first real name) without a
+// window.prompt() dialog. Committing (Enter/blur) with a non-empty,
+// trimmed name renames it; Escape or an empty name cancels/reverts.
+function startRename(entry, nameEl) {
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.className = 'rename-input';
+  input.value = entry.name;
+  input.maxLength = 60;
+  nameEl.replaceWith(input);
+  input.focus();
+  input.select();
+
+  let settled = false;
+  function commit() {
+    if (settled) return;
+    settled = true;
+    const newName = input.value.trim();
+    if (newName) {
+      library = renameEntry(library, entry.id, newName);
+      persistLibrary(library);
+    }
+    renderPlaysTree();
+  }
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') input.blur();
+    if (e.key === 'Escape') { settled = true; renderPlaysTree(); }
+  });
+  input.addEventListener('blur', commit);
+}
+
+function renderPlaysTreeChildren(container, parentId, depth) {
+  const children = childrenOf(library, parentId);
+  if (children.length === 0 && depth === 0) {
+    const empty = document.createElement('li');
+    empty.className = 'plays-tree-empty';
+    empty.textContent = 'No saved plays yet.';
+    container.appendChild(empty);
+    return;
+  }
+
+  children.forEach(entry => {
+    const li = document.createElement('li');
+    li.dataset.id = entry.id;
+    li.dataset.type = entry.type;
+    const row = document.createElement('div');
+    row.className = 'plays-tree-row';
+    if (entry.type === 'folder' && entry.id === currentFolderId) row.classList.add('current');
+
+    if (entry.type === 'folder') {
+      const expanded = expandedFolderIds.has(entry.id);
+      const toggleBtn = createTreeButton('toggle-btn', expanded ? '▾' : '▸', `${expanded ? 'Collapse' : 'Expand'} ${entry.name}`, () => {
+        if (expanded) expandedFolderIds.delete(entry.id); else expandedFolderIds.add(entry.id);
+        renderPlaysTree();
+      });
+
+      const nameEl = document.createElement('button');
+      nameEl.className = 'folder-name';
+      nameEl.textContent = entry.name;
+      nameEl.title = 'Select as save location';
+      nameEl.addEventListener('click', () => {
+        currentFolderId = entry.id;
+        expandedFolderIds.add(entry.id);
+        renderPlaysTree();
+      });
+      nameEl.addEventListener('dblclick', (e) => {
+        e.stopPropagation();
+        startRename(entry, nameEl);
+      });
+
+      const addSubfolderBtn = createTreeButton('add-subfolder-btn', '+', `New folder inside ${entry.name}`, () => {
+        currentFolderId = entry.id;
+        expandedFolderIds.add(entry.id);
+        createFolderAndRename(entry.id);
+      });
+      const deleteBtn = createTreeButton('delete-btn', '×', `Delete ${entry.name}`, () => deleteEntryAndReconcile(entry));
+
+      row.append(toggleBtn, nameEl, addSubfolderBtn, deleteBtn);
+      li.appendChild(row);
+
+      if (expanded) {
+        const childList = document.createElement('ul');
+        childList.className = 'plays-tree-children';
+        renderPlaysTreeChildren(childList, entry.id, depth + 1);
+        li.appendChild(childList);
+      }
+    } else {
+      const spacer = document.createElement('span');
+      spacer.className = 'toggle-btn';
+      const nameEl = document.createElement('button');
+      nameEl.className = 'play-name';
+      nameEl.textContent = entry.name;
+      nameEl.title = 'Load this play';
+      nameEl.addEventListener('click', () => loadPlayEntry(entry));
+      nameEl.addEventListener('dblclick', (e) => {
+        e.stopPropagation();
+        startRename(entry, nameEl);
+      });
+      const deleteBtn = createTreeButton('delete-btn', '×', `Delete ${entry.name}`, () => deleteEntryAndReconcile(entry));
+
+      row.append(spacer, nameEl, deleteBtn);
+      li.appendChild(row);
+    }
+
+    container.appendChild(li);
+  });
+}
+
+function renderPlaysTree() {
+  playsTreeEl.innerHTML = '';
+  renderPlaysTreeChildren(playsTreeEl, null, 0);
+  updatePlaysLocationLabel();
+}
+
+function loadPlayEntry(entry) {
+  const snapshot = loadPlaySnapshot(entry);
+  tokens = snapshot.tokens;
+  lines = snapshot.lines;
+  resetInteractionState();
+  playNameInput.value = entry.name;
+  currentFolderId = entry.parentId;
+  renderPlaysTree();
+  redraw();
+}
+
+// Deletes a folder/play, then makes sure `currentFolderId` still points
+// at a folder that still exists — stepping up to the deleted folder's
+// own parent if the current folder was it (or was nested inside it).
+function deleteEntryAndReconcile(entry) {
+  const steppingOutOfCurrent = entry.type === 'folder' && isWithinSubtree(library, currentFolderId, entry.id);
+  library = deleteEntry(library, entry.id);
+  persistLibrary(library);
+  if (steppingOutOfCurrent) currentFolderId = entry.parentId;
+  renderPlaysTree();
+}
+
+// Creates a new folder under `parentId` with a placeholder name, then
+// immediately drops it into rename mode so the user can type its real
+// name right away (Explorer/Finder-style "New Folder" creation).
+function createFolderAndRename(parentId) {
+  const name = uniqueSiblingName(library, parentId, 'New Folder');
+  library = createFolder(library, name, parentId);
+  persistLibrary(library);
+  renderPlaysTree();
+  const newEntry = library[library.length - 1];
+  const nameEl = playsTreeEl.querySelector(`li[data-id="${newEntry.id}"] > .plays-tree-row > .folder-name`);
+  if (nameEl) startRename(newEntry, nameEl);
+}
+
+newFolderBtn.addEventListener('click', () => createFolderAndRename(currentFolderId));
 
 savePlayBtn.addEventListener('click', () => {
   const name = playNameInput.value.trim();
   if (!name) return;
-  savedPlays = saveNamedPlay(savedPlays, name, tokens, lines);
-  persistSavedPlays(savedPlays);
-  const saved = savedPlays.find(p => p.name === name);
-  refreshPlaysSelect(saved ? saved.id : undefined);
+  library = saveNamedPlay(library, name, tokens, lines, currentFolderId);
+  persistLibrary(library);
+  renderPlaysTree();
 });
 
-loadPlayBtn.addEventListener('click', () => {
-  const play = savedPlays.find(p => p.id === savedPlaysSelect.value);
-  if (!play) return;
-  const snapshot = loadPlaySnapshot(play);
-  tokens = snapshot.tokens;
-  lines = snapshot.lines;
-  resetInteractionState();
-  playNameInput.value = play.name;
-  redraw();
-});
+renderPlaysTree();
 
-deletePlayBtn.addEventListener('click', () => {
-  const id = savedPlaysSelect.value;
-  if (!id) return;
-  savedPlays = deleteNamedPlay(savedPlays, id);
-  persistSavedPlays(savedPlays);
-  refreshPlaysSelect();
-});
-
-refreshPlaysSelect();
 
 // --- Tool palette: pick a line type to draw, or click the active tool
 // again to return to plain move mode. ------------------------------------
