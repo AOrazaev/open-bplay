@@ -175,4 +175,29 @@ test.describe('Checkpoint 2 — tray-driven place & drag tokens', () => {
     expect(result.x).toBe(30);
     expect(result.y).toBe(30);
   });
+
+  test('the ball-carry nudge fades in smoothly with distance, rather than snapping on/off', async ({ page }) => {
+    // Playback interpolation doesn't always keep a ball and its carrier
+    // perfectly coincident frame to frame, so the nudge must ease in/out
+    // instead of toggling at a hard threshold — otherwise the ball
+    // visibly jumps mid-animation.
+    await page.goto('/');
+    const result = await page.evaluate(() => {
+      const player = { id: 'p1', type: 'offense', label: '1', x: HOOP_FT.x, y: HOOP_FT.y - 15 };
+      const distances = [0, BALL_CARRY_THRESHOLD_FT * 0.25, BALL_CARRY_THRESHOLD_FT * 0.5,
+        BALL_CARRY_THRESHOLD_FT * 0.75, BALL_CARRY_THRESHOLD_FT * 0.999, BALL_CARRY_THRESHOLD_FT * 1.01];
+      return distances.map(d => {
+        const ball = { id: 'b1', type: 'ball', x: player.x, y: player.y - d };
+        const pos = ballDrawPositionFt(ball, [player]);
+        return Math.hypot(pos.x - ball.x, pos.y - ball.y); // how far the draw nudged it from its own spot
+      });
+    });
+    // Nudge magnitude strictly decreases as the ball moves away from its
+    // carrier, reaching (essentially) zero right at the threshold, with
+    // no discontinuous jump back up past it.
+    for (let i = 1; i < result.length; i++) {
+      expect(result[i]).toBeLessThanOrEqual(result[i - 1] + 1e-9);
+    }
+    expect(result[result.length - 1]).toBeCloseTo(0, 5);
+  });
 });

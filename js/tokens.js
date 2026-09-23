@@ -80,6 +80,10 @@ function drawToken(ctx, token, map) {
   ctx.restore();
 }
 
+// This is the ball-and-player rendering position — the actual token data
+// stays untouched. Straight-line drag/reordering is fine here, but see the
+// note in ballDrawPositionFt() below about why the offset must fade in
+// smoothly rather than snap on/off at BALL_CARRY_THRESHOLD_FT.
 function drawTokens(ctx, tokens, map) {
   // Draw the ball last so it always renders on top of player tokens,
   // regardless of spawn/array order (e.g. when a player and the ball
@@ -93,31 +97,52 @@ function drawTokens(ctx, tokens, map) {
   });
 }
 
-// When a ball sits on/near a player (e.g. right after applying a
-// dribble/pass arrow, which moves both to the same point), returns a
-// nudged { x, y } for *drawing only* — offset away from the hoop along the
-// ray from HOOP_FT through the player, so the ball reads as held out
-// toward half-court rather than centered on the player's number. Actual
-// token data (and hit-testing) are untouched; only the drawn pixel moves.
-// Returns the original token unchanged when no player is close enough.
+// When a ball is near a player (e.g. right after applying a dribble/pass
+// arrow, which moves both to the same point), returns a nudged { x, y }
+// for *drawing only* — offset away from the hoop along the ray from
+// HOOP_FT through the player, so the ball reads as held out toward
+// half-court rather than centered on the player's number. Actual token
+// data (and hit-testing) are untouched; only the drawn pixel moves.
+//
+// The nudge fades in smoothly as distance shrinks from
+// BALL_CARRY_THRESHOLD_FT (no nudge at all — draws at the ball's own
+// position) down to 0 (full nudge). This blend matters during frame
+// playback: the ball and its carrier don't always travel at exactly the
+// same interpolated speed, so the gap between them can drift back and
+// forth across a hard on/off threshold several times per animation —
+// which would otherwise make the ball visibly snap in and out of its
+// nudged spot mid-play.
 function ballDrawPositionFt(ballToken, playerTokens) {
-  const carrier = playerTokens.find(
-    t => Math.hypot(t.x - ballToken.x, t.y - ballToken.y) <= BALL_CARRY_THRESHOLD_FT
-  );
-  if (!carrier) return ballToken;
+  let carrier = null;
+  let carrierDistFt = Infinity;
+  playerTokens.forEach(t => {
+    const d = Math.hypot(t.x - ballToken.x, t.y - ballToken.y);
+    if (d < carrierDistFt) {
+      carrierDistFt = d;
+      carrier = t;
+    }
+  });
+  if (!carrier || carrierDistFt >= BALL_CARRY_THRESHOLD_FT) return ballToken;
 
   let dx = carrier.x - HOOP_FT.x;
   let dy = carrier.y - HOOP_FT.y;
-  const dist = Math.hypot(dx, dy);
-  if (dist < 0.01) {
+  const hoopDistFt = Math.hypot(dx, dy);
+  if (hoopDistFt < 0.01) {
     // Degenerate case: carrier is essentially standing on the hoop.
     dx = 0;
     dy = -1;
   } else {
-    dx /= dist;
-    dy /= dist;
+    dx /= hoopDistFt;
+    dy /= hoopDistFt;
   }
-  return { x: carrier.x + dx * BALL_CARRY_OFFSET_FT, y: carrier.y + dy * BALL_CARRY_OFFSET_FT };
+
+  const blend = 1 - carrierDistFt / BALL_CARRY_THRESHOLD_FT; // 0 at the edge, 1 when coincident
+  const nudgedX = carrier.x + dx * BALL_CARRY_OFFSET_FT;
+  const nudgedY = carrier.y + dy * BALL_CARRY_OFFSET_FT;
+  return {
+    x: ballToken.x + (nudgedX - ballToken.x) * blend,
+    y: ballToken.y + (nudgedY - ballToken.y) * blend,
+  };
 }
 
 // Finds the topmost (last-drawn) token within hitRadiusFt of the given
