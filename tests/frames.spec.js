@@ -138,11 +138,13 @@ test.describe('Checkpoint 6 — multi-step plays (frames)', () => {
     await expect.poll(() => page.evaluate(() => tokens.length)).toBe(1);
   });
 
-  test('Play animates through the sequence and returns to the starting frame', async ({ page }) => {
+  test('Play animates through the sequence and lands on the last frame when it finishes', async ({ page }) => {
     await page.goto('/');
     await spawnTokenAt(page, 'offense', 10, 30);
     await page.click('#addFrameBtn');
     await expect(page.locator('#frameLabel')).toHaveText('Frame 2 of 2');
+    await page.click('#prevFrameBtn');
+    await expect(page.locator('#frameLabel')).toHaveText('Frame 1 of 2');
 
     await page.click('#playFramesBtn');
     await expect(page.locator('#playFramesBtn')).toHaveText('■ Stop');
@@ -154,8 +156,25 @@ test.describe('Checkpoint 6 — multi-step plays (frames)', () => {
     // so this waits for it to finish on its own rather than clicking
     // Stop, to also verify auto-completion.
     await expect(page.locator('#playFramesBtn')).toHaveText('▶ Play', { timeout: 3000 });
+    // Finishing playback on its own leaves you on the last frame, not
+    // back where Play was pressed from.
     await expect(page.locator('#frameLabel')).toHaveText('Frame 2 of 2');
     await expect(page.locator('#addFrameBtn')).toBeEnabled();
+  });
+
+  test('manually pressing Stop mid-playback returns to the frame Play was pressed from', async ({ page }) => {
+    await page.goto('/');
+    await spawnTokenAt(page, 'offense', 10, 30);
+    await page.click('#addFrameBtn');
+    await page.click('#prevFrameBtn');
+    await expect(page.locator('#frameLabel')).toHaveText('Frame 1 of 2');
+
+    await page.click('#playFramesBtn');
+    await expect(page.locator('#playFramesBtn')).toHaveText('■ Stop');
+    await page.click('#playFramesBtn'); // Stop before it finishes on its own
+
+    await expect(page.locator('#playFramesBtn')).toHaveText('▶ Play');
+    await expect(page.locator('#frameLabel')).toHaveText('Frame 1 of 2');
   });
 
   test('playback moves tokens at a constant speed, so a short move finishes before a long one', async ({ page }) => {

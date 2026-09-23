@@ -87,15 +87,16 @@ deleteFrameBtn.addEventListener('click', () => {
   applyFrameSwitch(Math.min(currentFrameIndex, frames.length - 1));
 });
 
-// Stops any running playback animation and restores the frame that was
-// showing before Play was pressed — this is a preview, not a navigation
-// action, so it always leaves you back where you started.
-function stopPlayback() {
+// Stops any running playback animation. `restoreIndex` decides where the
+// frame bar lands: manually pressing Stop mid-playback returns to the
+// frame Play was pressed from (a preview should leave you where you were),
+// while playback finishing on its own leaves you on the last frame instead.
+function stopPlayback(restoreIndex = playbackStartIndex) {
   if (playbackHandle !== null) cancelAnimationFrame(playbackHandle);
   playbackHandle = null;
   playbackTokens = null;
   playFramesBtn.textContent = '▶ Play';
-  goToFrame(playbackStartIndex);
+  goToFrame(restoreIndex);
 }
 
 playFramesBtn.addEventListener('click', () => {
@@ -124,7 +125,7 @@ playFramesBtn.addEventListener('click', () => {
     if (elapsedMs >= segmentDurationMs) {
       segment++;
       if (segment >= frames.length - 1) {
-        stopPlayback();
+        stopPlayback(frames.length - 1);
         return;
       }
       segmentStart = now;
