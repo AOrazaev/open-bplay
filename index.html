@@ -60,6 +60,10 @@
         <button class="tool-btn" data-tool="dribble">Dribble</button>
       </div>
 
+      <main class="court-wrap">
+        <canvas id="courtCanvas" aria-label="Basketball half-court"></canvas>
+      </main>
+
       <div class="frame-bar" id="frameBar">
         <button id="prevFrameBtn" class="secondary" title="Previous frame">‹ Prev</button>
         <span class="frame-label" id="frameLabel">Frame 1 of 1</span>
@@ -69,9 +73,6 @@
         <button id="playFramesBtn" class="secondary" title="Play back the frame sequence">▶ Play</button>
       </div>
 
-      <main class="court-wrap">
-        <canvas id="courtCanvas" aria-label="Basketball half-court"></canvas>
-      </main>
       <p class="hint">Drag a token from the tray onto the court to place it. Drag a token off the court (or double-click it) to remove it. Select a line tool, then drag from a token to draw a cut/pass/screen/dribble — click the tool again for move mode. Click a line to select it, then drag its curve handle to bend it, or drag its endpoint to move it, detach it from a token, or attach it to a different token. Double-click a line to remove it.</p>
     </div>
   </div>
