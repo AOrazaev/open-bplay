@@ -148,7 +148,7 @@ body {
 .app-layout {
   display: flex;
   align-items: stretch;
-  gap: 20px;
+  gap: 0;
   padding: 0 24px 24px;
   min-height: calc(100vh - 65px);
 }
@@ -169,13 +169,78 @@ body {
 }
 
 .sidebar {
-  flex: 0 0 240px;
+  flex: 0 0 auto;
+  width: 240px;
+  margin-right: 8px;
   background: var(--card);
   border-radius: 12px;
   padding: 16px;
   display: flex;
   flex-direction: column;
   gap: 10px;
+  overflow: hidden;
+  transition: width 0.15s ease, margin 0.15s ease, opacity 0.15s ease;
+}
+
+/* Suppressed while actively dragging the resize handle, so the width
+   tracks the pointer 1:1 instead of lagging behind/animating toward it —
+   the transition is only meant to smooth the collapse/expand toggle. */
+.sidebar.resizing {
+  transition: none;
+}
+
+/* Collapsing shrinks the sidebar to nothing rather than unmounting it, so
+   its scroll position/DOM state (tree expansion, etc.) survives being
+   hidden and shown again. Width is forced past the resize-set inline
+   style with !important since that inline style is what drives the
+   normal (non-collapsed) width. */
+.sidebar.collapsed {
+  width: 0 !important;
+  margin-right: 0;
+  padding: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.sidebar-toggle {
+  flex: 0 0 auto;
+  align-self: center;
+  width: 18px;
+  height: 56px;
+  margin-right: 8px;
+  background: #1e2740;
+  color: var(--muted);
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1;
+}
+
+.sidebar-toggle:hover {
+  background: #26335c;
+  color: var(--text);
+}
+
+/* Sits between the sidebar and the toggle button; dragging it changes
+   the sidebar's width. Hidden (rather than merely inert) while the
+   sidebar is collapsed, since there's nothing to resize at that point. */
+.sidebar-resize-handle {
+  flex: 0 0 6px;
+  align-self: stretch;
+  margin-right: 12px;
+  border-radius: 3px;
+  cursor: col-resize;
+  background: transparent;
+}
+
+.sidebar-resize-handle:hover,
+.sidebar-resize-handle.dragging {
+  background: #2c3a63;
+}
+
+.sidebar-resize-handle.hidden {
+  display: none;
 }
 
 .sidebar-title {
