@@ -13,6 +13,10 @@
 
   <div class="app-layout">
     <aside class="sidebar" id="playsSidebar">
+      <div class="sidebar-actions">
+        <button id="exportImageBtn" class="secondary sidebar-export-btn">Export Image</button>
+      </div>
+
       <h2 class="sidebar-title">Plays</h2>
       <p class="sidebar-hint">Organize plays into folders. Click a folder to select it as the save location; double-click a name to rename it.</p>
 
@@ -27,8 +31,6 @@
         <input id="playNameInput" type="text" placeholder="Play name" maxlength="60" aria-label="Play name" />
         <button id="savePlayBtn">Save</button>
       </div>
-
-      <button id="exportImageBtn" class="secondary sidebar-export-btn">Export Image</button>
     </aside>
 
     <button id="sidebarToggle" class="sidebar-toggle" aria-label="Hide plays sidebar" title="Hide plays sidebar">‹</button>
