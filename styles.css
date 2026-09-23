@@ -236,7 +236,14 @@ body {
 .plays-tree ul.plays-tree-children {
   list-style: none;
   margin: 0;
-  padding: 0;
+  /* Indents each nesting level relative to its parent folder; since this
+     rule applies to every nested <ul>, deeper levels stack the indent
+     cumulatively (e.g. a play two folders deep sits 28px in). The left
+     border gives a faint vertical guide tying children back to their
+     folder, on top of the indent itself. */
+  padding: 0 0 0 16px;
+  border-left: 1px solid #33406b;
+  margin-left: 6px;
 }
 
 .plays-tree-row {
