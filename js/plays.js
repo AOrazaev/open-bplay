@@ -11,7 +11,11 @@
 // entries can point at as their parent, so nesting is "for free" and
 // cascading delete/move only ever have to walk this one array.
 //   folder: { id, type: 'folder', name, parentId }
-//   play:   { id, type: 'play', name, parentId, tokens, lines, savedAt }
+//   play:   { id, type: 'play', name, parentId, frames, savedAt }
+// (`frames` is an array of { tokens, lines } steps — Checkpoint 6's
+// multi-step plays. Plays saved before that feature has a legacy
+// top-level { tokens, lines } instead of `frames`; loadPlaySnapshot below
+// migrates that into a single-frame array on load.)
 
 const PLAYS_STORAGE_KEY = 'play-drawing-saved-plays-v1';
 
@@ -45,16 +49,14 @@ const COURT_AUTOSAVE_KEY = 'play-drawing-court-autosave-v1';
 
 function loadCourtAutosave() {
   try {
-    const saved = JSON.parse(localStorage.getItem(COURT_AUTOSAVE_KEY));
-    if (saved && Array.isArray(saved.tokens) && Array.isArray(saved.lines)) {
-      return { tokens: saved.tokens, lines: saved.lines };
-    }
+    const normalized = normalizeFrames(JSON.parse(localStorage.getItem(COURT_AUTOSAVE_KEY)));
+    if (normalized) return normalized;
   } catch (_) {}
   return null;
 }
 
-function persistCourtAutosave(tokens, lines) {
-  localStorage.setItem(COURT_AUTOSAVE_KEY, JSON.stringify({ tokens, lines }));
+function persistCourtAutosave(frames, currentFrameIndex) {
+  localStorage.setItem(COURT_AUTOSAVE_KEY, JSON.stringify({ frames, currentFrameIndex }));
 }
 
 function loadViewState() {
@@ -120,32 +122,35 @@ function createFolder(library, name, parentId) {
   return library;
 }
 
-// Saves a snapshot of the given tokens/lines under `name` inside folder
+// Saves a snapshot of the given frame sequence under `name` inside folder
 // `parentId`, returning the updated library. Re-saving under a name that
 // already exists *in the same folder* overwrites that play in place
 // rather than creating a duplicate, so "load, tweak, save" naturally
 // updates the same entry — the same name is still free to reuse in a
 // different folder.
-function saveNamedPlay(library, name, tokens, lines, parentId) {
-  const tokensSnapshot = structuredClone(tokens);
-  const linesSnapshot = structuredClone(lines);
+function saveNamedPlay(library, name, frames, parentId) {
+  const framesSnapshot = frames.map(cloneFrame);
   const existing = library.find(e => e.type === 'play' && e.name === name && e.parentId === parentId);
   if (existing) {
-    existing.tokens = tokensSnapshot;
-    existing.lines = linesSnapshot;
+    existing.frames = framesSnapshot;
+    delete existing.tokens; // drop any legacy single-snapshot fields on re-save
+    delete existing.lines;
     existing.savedAt = Date.now();
   } else {
-    library.push({ id: crypto.randomUUID(), type: 'play', name, parentId, tokens: tokensSnapshot, lines: linesSnapshot, savedAt: Date.now() });
+    library.push({ id: crypto.randomUUID(), type: 'play', name, parentId, frames: framesSnapshot, savedAt: Date.now() });
   }
   return library;
 }
 
-// Returns a deep copy of a saved play's tokens/lines, safe to assign
+// Returns a deep copy of a saved play's frame sequence, safe to assign
 // directly into the live court state without aliasing the stored copy
 // (so further edits to the loaded play don't silently mutate storage
-// until the user explicitly saves again).
+// until the user explicitly saves again). Migrates a play saved before
+// Checkpoint 6 (a single top-level { tokens, lines }, no `frames`) into
+// a one-frame array.
 function loadPlaySnapshot(play) {
-  return { tokens: structuredClone(play.tokens), lines: structuredClone(play.lines) };
+  const normalized = normalizeFrames(play);
+  return { frames: normalized.frames.map(cloneFrame) };
 }
 
 // Deletes an entry by id. If it's a folder, cascades to every entry

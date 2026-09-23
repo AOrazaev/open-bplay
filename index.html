@@ -60,6 +60,15 @@
         <button class="tool-btn" data-tool="dribble">Dribble</button>
       </div>
 
+      <div class="frame-bar" id="frameBar">
+        <button id="prevFrameBtn" class="secondary" title="Previous frame">‹ Prev</button>
+        <span class="frame-label" id="frameLabel">Frame 1 of 1</span>
+        <button id="nextFrameBtn" class="secondary" title="Next frame">Next ›</button>
+        <button id="addFrameBtn" class="secondary" title="Add a new frame after this one">+ Frame</button>
+        <button id="deleteFrameBtn" class="secondary" title="Delete this frame">Delete Frame</button>
+        <button id="playFramesBtn" class="secondary" title="Play back the frame sequence">▶ Play</button>
+      </div>
+
       <main class="court-wrap">
         <canvas id="courtCanvas" aria-label="Basketball half-court"></canvas>
       </main>
@@ -70,9 +79,11 @@
   <script src="js/court.js"></script>
   <script src="js/tokens.js"></script>
   <script src="js/lines.js"></script>
+  <script src="js/frames.js"></script>
   <script src="js/plays.js"></script>
   <script src="js/sidebar.js"></script>
   <script src="js/app.js"></script>
+  <script src="js/frames-ui.js"></script>
   <script src="js/export.js"></script>
 </body>
 </html>

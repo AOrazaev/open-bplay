@@ -201,7 +201,7 @@ test.describe('Checkpoint 4 — save/load plays in a nested folder hierarchy', (
     await expect(page.locator('.play-name', { hasText: 'Iso' })).toHaveCount(1);
     const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('play-drawing-saved-plays-v1')));
     expect(saved).toHaveLength(1);
-    expect(saved[0].tokens).toHaveLength(2);
+    expect(saved[0].frames[0].tokens).toHaveLength(2);
   });
 
   test('the same play name is allowed in two different folders', async ({ page }) => {

@@ -21,6 +21,11 @@ function drawToken(ctx, token, map) {
   // user lets go.
   if (token.removing) {
     ctx.globalAlpha = 0.45;
+  } else if (token.alpha != null) {
+    // Set only during frame-sequence playback, to cross-fade a token that
+    // only exists on one side of a frame transition (see
+    // interpolateFrameTokens in js/frames.js).
+    ctx.globalAlpha = token.alpha;
   }
 
   if (token.type === TOKEN_TYPES.DEFENSE) {

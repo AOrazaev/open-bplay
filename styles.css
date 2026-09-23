@@ -146,6 +146,40 @@ body {
   background: #24325a;
 }
 
+.frame-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: center;
+  flex-wrap: wrap;
+  padding: 12px 24px 0;
+}
+
+.frame-bar button.secondary {
+  background: #1e2740;
+  color: var(--muted);
+  border: none;
+  border-radius: 8px;
+  padding: 6px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.frame-bar button.secondary:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.frame-label {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+  min-width: 100px;
+  text-align: center;
+}
+
 .app-layout {
   display: flex;
   align-items: stretch;
@@ -164,7 +198,8 @@ body {
 }
 
 .main-panel .tray,
-.main-panel .tool-palette {
+.main-panel .tool-palette,
+.main-panel .frame-bar {
   padding-left: 0;
   padding-right: 0;
 }

@@ -1,6 +1,7 @@
 // Top-level wiring / bootstrap: canvas setup, token/line state, tray-driven
 // spawn-dragging, tool-driven line-drawing, and pointer-driven move/remove
-// interactions. Loaded last.
+// interactions. Loaded after plays.js/sidebar.js, before frames-ui.js and
+// export.js (which both depend on globals declared here).
 
 const courtCanvas = document.querySelector('#courtCanvas');
 const trayChips = [...document.querySelectorAll('.tray-chip')];
@@ -12,8 +13,8 @@ const newFolderBtn = document.querySelector('#newFolderBtn');
 const playsLocationEl = document.querySelector('#playsLocation');
 const playsTreeEl = document.querySelector('#playsTree');
 
-let tokens = [];
-let lines = [];
+let frames = createInitialFrames();
+let currentFrameIndex = 0;
 
 // Restore whatever was on the court at the end of the last session (if
 // anything), independent of the saved-plays library — a lightweight
@@ -21,17 +22,30 @@ let lines = [];
 // coming back doesn't lose in-progress work.
 const courtAutosave = loadCourtAutosave();
 if (courtAutosave) {
-  tokens = courtAutosave.tokens;
-  lines = courtAutosave.lines;
+  frames = courtAutosave.frames;
+  currentFrameIndex = courtAutosave.currentFrameIndex;
 }
 
-// Persists the current tokens/lines as the court autosave. Called after
+let tokens = frames[currentFrameIndex].tokens;
+let lines = frames[currentFrameIndex].lines;
+
+// Writes the live tokens/lines back into the frames array at the current
+// index — needed before persisting or switching frames, since tokens/
+// lines are frequently *reassigned* (e.g. `tokens = tokens.filter(...)`)
+// rather than mutated in place, which would otherwise leave the frames
+// array holding a stale reference.
+function syncCurrentFrame() {
+  frames[currentFrameIndex] = { tokens, lines };
+}
+
+// Persists the current frame sequence as the court autosave. Called after
 // every action that settles into a new stable state (a drag/create/
-// delete finishing, a play loading, Clear) rather than on every
-// intermediate redraw, so an in-progress drag isn't writing to
+// delete finishing, a play loading, Clear, a frame switch) rather than on
+// every intermediate redraw, so an in-progress drag isn't writing to
 // localStorage on every pointermove.
 function persistCourtState() {
-  persistCourtAutosave(tokens, lines);
+  syncCurrentFrame();
+  persistCourtAutosave(frames, currentFrameIndex);
 }
 
 let dragState = null; // { id, pointerId } — dragging an existing court token
@@ -41,8 +55,16 @@ let activeTool = null; // one of LINE_TYPES, or null for plain move mode
 let selectedLineId = null; // line currently showing its curve/endpoint handles
 let curveDrag = null; // { lineId, pointerId } — dragging a selected line's curve handle
 let endpointDrag = null; // { lineId, pointerId } — dragging a selected line's free-endpoint handle
+let playbackTokens = null; // non-null only while frame-sequence playback (js/frames-ui.js) is animating
 
 const redraw = setupCourtCanvas(courtCanvas, (ctx, map) => {
+  if (playbackTokens) {
+    // During playback we only show the interpolated token positions —
+    // no lines, no selection handles, no in-progress drag previews — a
+    // clean animated preview of how the play's frames flow together.
+    drawTokens(ctx, playbackTokens, map);
+    return;
+  }
   drawLines(ctx, lines, tokens, map);
   drawTokens(ctx, tokens, map);
   if (spawnDrag && spawnDrag.preview) {
@@ -139,10 +161,13 @@ function resetInteractionState() {
 }
 
 clearCourtBtn.addEventListener('click', () => {
-  tokens = [];
-  lines = [];
+  frames = createInitialFrames();
+  currentFrameIndex = 0;
+  tokens = frames[0].tokens;
+  lines = frames[0].lines;
   resetInteractionState();
   persistCourtState();
+  updateFrameBar();
   redraw();
 });
 
@@ -320,13 +345,16 @@ function renderPlaysTree() {
 
 function loadPlayEntry(entry) {
   const snapshot = loadPlaySnapshot(entry);
-  tokens = snapshot.tokens;
-  lines = snapshot.lines;
+  frames = snapshot.frames;
+  currentFrameIndex = 0;
+  tokens = frames[0].tokens;
+  lines = frames[0].lines;
   resetInteractionState();
   playNameInput.value = entry.name;
   currentFolderId = entry.parentId;
   renderPlaysTree();
   persistCourtState();
+  updateFrameBar();
   redraw();
 }
 
@@ -359,7 +387,8 @@ newFolderBtn.addEventListener('click', () => createFolderAndRename(currentFolder
 savePlayBtn.addEventListener('click', () => {
   const name = playNameInput.value.trim();
   if (!name) return;
-  library = saveNamedPlay(library, name, tokens, lines, currentFolderId);
+  syncCurrentFrame();
+  library = saveNamedPlay(library, name, frames, currentFolderId);
   persistLibrary(library);
   renderPlaysTree();
 });
