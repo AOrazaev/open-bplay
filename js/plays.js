@@ -32,6 +32,32 @@ function loadLibrary() {
   return [];
 }
 
+// A separate key from the library itself: this is pure sidebar UI state
+// (which folder is selected as the save location, which folders are
+// expanded) rather than saved-play data, so it's kept out of the schema
+// tested/migrated above.
+const PLAYS_VIEW_STATE_KEY = 'play-drawing-plays-view-state-v1';
+
+function loadViewState() {
+  try {
+    const state = JSON.parse(localStorage.getItem(PLAYS_VIEW_STATE_KEY));
+    if (state && typeof state === 'object') {
+      return {
+        currentFolderId: state.currentFolderId ?? null,
+        expandedFolderIds: Array.isArray(state.expandedFolderIds) ? state.expandedFolderIds : [],
+      };
+    }
+  } catch (_) {}
+  return { currentFolderId: null, expandedFolderIds: [] };
+}
+
+function persistViewState(currentFolderId, expandedFolderIds) {
+  localStorage.setItem(PLAYS_VIEW_STATE_KEY, JSON.stringify({
+    currentFolderId,
+    expandedFolderIds: [...expandedFolderIds],
+  }));
+}
+
 function persistLibrary(library) {
   localStorage.setItem(PLAYS_STORAGE_KEY, JSON.stringify(library));
 }

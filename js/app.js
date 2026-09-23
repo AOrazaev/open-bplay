@@ -127,13 +127,20 @@ clearCourtBtn.addEventListener('click', () => {
 // (Checkpoint 4, extended with a nestable folder hierarchy)
 
 let library = loadLibrary();
+
+// Restore the sidebar's view state (selected save-location folder, which
+// folders are expanded) from its last session, dropping any ids that no
+// longer correspond to a folder in the library (e.g. it was deleted, or
+// this is a fresh/cleared localStorage) so a stale reference can't leave
+// the tree stuck looking for a folder that isn't there anymore.
+const savedViewState = loadViewState();
+const isValidFolderId = (id) => id != null && library.some(e => e.type === 'folder' && e.id === id);
 // The folder new saves/subfolders land in — null means the library root.
 // Selected by clicking a folder's name in the tree.
-let currentFolderId = null;
-// Which folders are expanded in the tree. UI-only (not persisted) — a
-// reload always starts collapsed, which is a reasonable default and
-// keeps the persisted format free of view-state concerns.
-const expandedFolderIds = new Set();
+let currentFolderId = isValidFolderId(savedViewState.currentFolderId) ? savedViewState.currentFolderId : null;
+// Which folders are expanded in the tree — persisted so a reload doesn't
+// re-collapse everything the user had opened.
+const expandedFolderIds = new Set(savedViewState.expandedFolderIds.filter(isValidFolderId));
 
 function updatePlaysLocationLabel() {
   playsLocationEl.textContent = `Saving to: ${folderPath(library, currentFolderId).join(' / ')}`;
@@ -282,6 +289,10 @@ function renderPlaysTree() {
   playsTreeEl.innerHTML = '';
   renderPlaysTreeChildren(playsTreeEl, null, 0);
   updatePlaysLocationLabel();
+  // Every call site that changes currentFolderId/expandedFolderIds also
+  // re-renders the tree, so persisting here is the one place needed to
+  // keep the sidebar's view state surviving a reload.
+  persistViewState(currentFolderId, expandedFolderIds);
 }
 
 function loadPlayEntry(entry) {

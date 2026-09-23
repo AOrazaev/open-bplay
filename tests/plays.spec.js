@@ -230,12 +230,26 @@ test.describe('Checkpoint 4 — save/load plays in a nested folder hierarchy', (
     await savePlay(page, 'Horns');
 
     await page.reload();
-    // Tree starts collapsed after reload, so the nested play isn't visible
-    // until its folder is expanded.
+    // Selecting "Sets" via createFolder() also expanded it, and that
+    // expanded/current view state is now persisted too, so the nested
+    // play should still be visible right after reload with no extra click.
     await expect(folderRow(page, 'Sets')).toBeVisible();
-    await expect(playRow(page, 'Horns')).toHaveCount(0);
+    await expect(folderRow(page, 'Sets')).toHaveClass(/current/);
+    await expect(playRow(page, 'Horns')).toBeVisible();
+    await expect(page.locator('#playsLocation')).toHaveText('Saving to: Root / Sets');
+  });
+
+  test('collapsing a folder and reloading keeps it collapsed', async ({ page }) => {
+    await page.goto('/');
+    await createFolder(page, 'Sets');
+    await spawnTokenAt(page, 'offense', 10, 30);
+    await savePlay(page, 'Horns');
 
     await folderRow(page, 'Sets').locator('.toggle-btn').click();
-    await expect(playRow(page, 'Horns')).toBeVisible();
+    await expect(playRow(page, 'Horns')).toHaveCount(0);
+
+    await page.reload();
+    await expect(folderRow(page, 'Sets')).toBeVisible();
+    await expect(playRow(page, 'Horns')).toHaveCount(0);
   });
 });
