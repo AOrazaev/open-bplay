@@ -110,7 +110,7 @@ body {
   color: var(--muted);
 }
 
-.tray button#clearCourt {
+.tray button.secondary {
   background: #1e2740;
   color: var(--muted);
   border: none;
@@ -119,6 +119,7 @@ body {
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
+  white-space: nowrap;
 }
 
 .tool-palette {
