@@ -11,8 +11,6 @@ const deleteFrameBtn = document.querySelector('#deleteFrameBtn');
 const playFramesBtn = document.querySelector('#playFramesBtn');
 const frameLabelEl = document.querySelector('#frameLabel');
 
-const FRAME_TRANSITION_MS = 700;
-
 let playbackHandle = null; // requestAnimationFrame id while playback is running
 let playbackStartIndex = 0; // frame Play was pressed from, restored when it stops
 
@@ -102,20 +100,22 @@ playFramesBtn.addEventListener('click', () => {
 
   let segment = 0; // index of the frames[segment] -> frames[segment+1] transition
   let segmentStart = null; // performance.now() timestamp the current segment began
+  let segmentDurationMs = frameTransitionDurationMs(frames[0], frames[1]);
 
   function tick(now) {
     if (segmentStart === null) segmentStart = now;
-    const t = Math.min(1, (now - segmentStart) / FRAME_TRANSITION_MS);
-    playbackTokens = interpolateFrameTokens(frames[segment].tokens, frames[segment + 1].tokens, t);
+    const elapsedMs = now - segmentStart;
+    playbackTokens = interpolateFrameTokens(frames[segment].tokens, frames[segment + 1].tokens, elapsedMs, segmentDurationMs);
     redraw();
 
-    if (t >= 1) {
+    if (elapsedMs >= segmentDurationMs) {
       segment++;
-      segmentStart = now;
       if (segment >= frames.length - 1) {
         stopPlayback();
         return;
       }
+      segmentStart = now;
+      segmentDurationMs = frameTransitionDurationMs(frames[segment], frames[segment + 1]);
     }
     playbackHandle = requestAnimationFrame(tick);
   }

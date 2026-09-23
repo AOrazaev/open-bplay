@@ -149,11 +149,44 @@ test.describe('Checkpoint 6 — multi-step plays (frames)', () => {
     // Buttons that would interfere with playback are disabled while it runs.
     await expect(page.locator('#addFrameBtn')).toBeDisabled();
 
-    // Playback runs two ~700ms transitions (frame 1 -> 2 -> back is not
-    // looped; it's a single forward pass) — wait for it to finish on its
-    // own rather than clicking Stop, to also verify auto-completion.
+    // Playback runs a single transition (frame 1 -> 2); its duration is
+    // derived from the farthest-traveling token (clamped to a minimum),
+    // so this waits for it to finish on its own rather than clicking
+    // Stop, to also verify auto-completion.
     await expect(page.locator('#playFramesBtn')).toHaveText('▶ Play', { timeout: 3000 });
     await expect(page.locator('#frameLabel')).toHaveText('Frame 2 of 2');
     await expect(page.locator('#addFrameBtn')).toBeEnabled();
+  });
+
+  test('playback moves tokens at a constant speed, so a short move finishes before a long one', async ({ page }) => {
+    await page.goto('/');
+    const result = await page.evaluate(() => {
+      const fromFrame = {
+        tokens: [
+          { id: 'short', type: 'offense', label: '1', x: 10, y: 10 },
+          { id: 'long', type: 'offense', label: '2', x: 0, y: 0 },
+        ],
+        lines: [],
+      };
+      const toFrame = {
+        tokens: [
+          { id: 'short', type: 'offense', label: '1', x: 11, y: 10 }, // 1 ft
+          { id: 'long', type: 'offense', label: '2', x: 40, y: 0 }, // 40 ft
+        ],
+        lines: [],
+      };
+      const durationMs = frameTransitionDurationMs(fromFrame, toFrame);
+      // Sample partway through: the short move should already be at its
+      // destination (it needed far less time at the shared speed), while
+      // the long move should still be under way.
+      const midway = interpolateFrameTokens(fromFrame.tokens, toFrame.tokens, durationMs * 0.4, durationMs);
+      const short = midway.find(t => t.id === 'short');
+      const long = midway.find(t => t.id === 'long');
+      return { durationMs, shortX: short.x, longX: long.x };
+    });
+
+    expect(result.shortX).toBeCloseTo(11, 1); // arrived already
+    expect(result.longX).toBeGreaterThan(0);
+    expect(result.longX).toBeLessThan(40); // still travelling
   });
 });
