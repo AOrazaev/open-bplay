@@ -37,6 +37,22 @@ test.describe('Checkpoint 1 — static court render', () => {
     expect(result.roundTripX).toBeCloseTo(25, 1);
   });
 
+  test('three-point corner segments meet the arc exactly (no gap/overlap)', async ({ page }) => {
+    await page.goto('/');
+    const distances = await page.evaluate(() => {
+      const hoopFt = { x: COURT_WIDTH_FT / 2, y: COURT_LENGTH_FT - 5.25 };
+      const { leftCornerTopFt, rightCornerTopFt } = threePointGeometry(hoopFt);
+      const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+      return {
+        left: dist(hoopFt, leftCornerTopFt),
+        right: dist(hoopFt, rightCornerTopFt),
+      };
+    });
+    const expectedRadius = await page.evaluate(() => THREE_POINT_ARC_RADIUS_FT);
+    expect(distances.left).toBeCloseTo(expectedRadius, 6);
+    expect(distances.right).toBeCloseTo(expectedRadius, 6);
+  });
+
   test('redraw keeps the canvas backing store in sync with its displayed size', async ({ page }) => {
     await page.goto('/');
     const before = await page.evaluate(() => {

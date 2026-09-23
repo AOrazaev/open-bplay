@@ -8,6 +8,26 @@
 // scaled to fit the canvas at render time.
 const COURT_WIDTH_FT = 50;
 const COURT_LENGTH_FT = 47;
+const THREE_POINT_ARC_RADIUS_FT = 23.75;
+const THREE_POINT_CORNER_X_FT = 3;
+
+// Geometry for the three-point line's straight corner segments and the arc
+// joining them: the corner segment's top endpoint must sit exactly
+// `THREE_POINT_ARC_RADIUS_FT` away from the hoop, or the straight line and
+// the arc won't meet cleanly (this was previously computed relative to the
+// baseline instead of the hoop, leaving a visible gap/overlap).
+function threePointGeometry(hoopFt) {
+  const cornerXFt = THREE_POINT_CORNER_X_FT;
+  const halfWidthFt = COURT_WIDTH_FT / 2;
+  const straightHeightFt = Math.sqrt(Math.max(0, THREE_POINT_ARC_RADIUS_FT ** 2 - (halfWidthFt - cornerXFt) ** 2));
+  const cornerTopY = hoopFt.y - straightHeightFt;
+  return {
+    cornerXFt,
+    leftCornerTopFt: { x: cornerXFt, y: cornerTopY },
+    rightCornerTopFt: { x: COURT_WIDTH_FT - cornerXFt, y: cornerTopY },
+  };
+}
+
 
 // Converts a court-space point (feet, origin at top-left of the drawn
 // half-court, y increasing toward half-court) into canvas pixels for a
@@ -98,11 +118,7 @@ function drawCourt(ctx, widthPx, heightPx) {
 
   // Three-point line: corner segments straight up from the baseline, joined
   // by an arc of radius 23.75ft centered on the hoop.
-  const cornerXFt = 3;
-  const arcRadiusFt = 23.75;
-  const straightHeightFt = Math.sqrt(Math.max(0, arcRadiusFt ** 2 - (COURT_WIDTH_FT / 2 - cornerXFt) ** 2));
-  const leftCornerTopFt = { x: cornerXFt, y: COURT_LENGTH_FT - straightHeightFt };
-  const rightCornerTopFt = { x: COURT_WIDTH_FT - cornerXFt, y: COURT_LENGTH_FT - straightHeightFt };
+  const { cornerXFt, leftCornerTopFt, rightCornerTopFt } = threePointGeometry(hoopFt);
   const leftCornerTopPx = map.toPx(leftCornerTopFt.x, leftCornerTopFt.y);
   const rightCornerTopPx = map.toPx(rightCornerTopFt.x, rightCornerTopFt.y);
   const leftBaselinePx = map.toPx(cornerXFt, COURT_LENGTH_FT);
@@ -120,7 +136,7 @@ function drawCourt(ctx, widthPx, heightPx) {
   const angleToLeftCorner = Math.atan2(leftCornerTopFt.y - hoopFt.y, leftCornerTopFt.x - hoopFt.x);
   const angleToRightCorner = Math.atan2(rightCornerTopFt.y - hoopFt.y, rightCornerTopFt.x - hoopFt.x);
   ctx.beginPath();
-  ctx.arc(hoopPx.x, hoopPx.y, arcRadiusFt * map.scale, angleToLeftCorner, angleToRightCorner);
+  ctx.arc(hoopPx.x, hoopPx.y, THREE_POINT_ARC_RADIUS_FT * map.scale, angleToLeftCorner, angleToRightCorner);
   ctx.stroke();
 
   // Half-court line at the top edge.
