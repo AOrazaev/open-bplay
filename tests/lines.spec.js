@@ -196,6 +196,27 @@ test.describe('Checkpoint 3 — draw movement lines', () => {
       expect(last.y).toBeCloseTo(5, 6);
     });
   });
+
+  test('a curved dribble squiggle still starts and ends exactly on its endpoints', async ({ page }) => {
+    await page.goto('/');
+    const results = await page.evaluate(() => {
+      const start = { x: 5, y: 5 };
+      const end = { x: 25, y: 5 };
+      return [0, 4, -6].map(curveOffsetFt => {
+        const controlFt = resolveControlPoint(start, end, curveOffsetFt);
+        const baseFt = bezierSamplePoints(start, controlFt, end, 40);
+        const path = squiggleAlongBase(baseFt);
+        return { curveOffsetFt, first: path[0], last: path[path.length - 1] };
+      });
+    });
+
+    results.forEach(({ first, last }) => {
+      expect(first.x).toBeCloseTo(5, 6);
+      expect(first.y).toBeCloseTo(5, 6);
+      expect(last.x).toBeCloseTo(25, 6);
+      expect(last.y).toBeCloseTo(5, 6);
+    });
+  });
 });
 
 test.describe('Checkpoint 3.1 — select, curve, and move drawn lines', () => {
@@ -306,5 +327,40 @@ test.describe('Checkpoint 3.1 — select, curve, and move drawn lines', () => {
     const secondTokenPos = await page.evaluate(() => ({ x: tokens[1].x, y: tokens[1].y }));
     expect(secondTokenPos.x).toBeCloseTo(25, 0);
     expect(secondTokenPos.y).toBeCloseTo(25, 0);
+  });
+
+  test('a dribble line can be selected and curved just like other line types', async ({ page }) => {
+    await page.goto('/');
+    await spawnTokenAt(page, 'offense', 10, 30);
+    await page.locator('.tool-btn[data-tool="dribble"]').click();
+    await dragFromTokenTo(page, 0, 30, 30); // horizontal dribble line
+    await expect.poll(() => page.evaluate(() => lines.length)).toBe(1);
+    expect(await page.evaluate(() => lines[0].type)).toBe('dribble');
+
+    const midPoint = await toClientPoint(page, 20, 30);
+    await page.mouse.click(midPoint.x, midPoint.y);
+    const lineId = await page.evaluate(() => lines[0].id);
+    await expect.poll(() => page.evaluate(() => selectedLineId)).toBe(lineId);
+
+    const targetPoint = await toClientPoint(page, 20, 38);
+    await page.mouse.move(midPoint.x, midPoint.y);
+    await page.mouse.down();
+    await page.mouse.move(targetPoint.x, targetPoint.y, { steps: 5 });
+    await page.mouse.up();
+
+    const curveOffsetFt = await page.evaluate(() => lines[0].curveOffsetFt);
+    expect(curveOffsetFt).toBeCloseTo(8, 0);
+
+    // The squiggle should still start/end exactly on the tokens despite
+    // now riding along a bent baseline.
+    const path = await page.evaluate(() => {
+      const line = lines[0];
+      const pts = resolveLineEndpoints(line, tokens);
+      return linePathPoints(line, pts);
+    });
+    expect(path[0].x).toBeCloseTo(10, 5);
+    expect(path[0].y).toBeCloseTo(30, 5);
+    expect(path[path.length - 1].x).toBeCloseTo(30, 5);
+    expect(path[path.length - 1].y).toBeCloseTo(30, 5);
   });
 });

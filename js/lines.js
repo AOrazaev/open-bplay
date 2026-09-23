@@ -10,9 +10,9 @@ const LINE_HANDLE_HIT_RADIUS_FT = 1.4;
 
 // `end` is either { tokenId } (line follows that token as it moves) or
 // { x, y } (line ends at a fixed court point). `curveOffsetFt` is the
-// perpendicular distance of the curve's control point from the straight
-// start→end axis (0 = straight); dribble lines ignore it since their
-// squiggle path is already non-straight.
+// perpendicular distance (from the straight start→end chord) of the point
+// the visible curve/baseline passes through at its midpoint (0 = straight)
+// — for dribble lines this bends the baseline the squiggle rides along.
 function createLine(type, originTokenId, end) {
   return {
     id: crypto.randomUUID(),
@@ -139,22 +139,61 @@ function squigglePoints(startFt, endFt, amplitudeFt = 0.6, waveLengthFt = 3) {
   return points;
 }
 
+// Same idea as squigglePoints, but the wave rides along an arbitrary
+// sampled baseline (e.g. a curved Bézier path) instead of a straight
+// start→end axis — used to draw a dribble line that's also been bent via
+// its curve handle. Waves/tapers by cumulative arc length along the
+// baseline, and offsets each sample perpendicular to its local tangent
+// (estimated from neighboring baseline points), so the wave stays aligned
+// with the bend instead of just rippling across a straight axis.
+function squiggleAlongBase(baseFt, amplitudeFt = 0.6, waveLengthFt = 3) {
+  const cumFt = [0];
+  for (let i = 1; i < baseFt.length; i++) {
+    cumFt.push(cumFt[i - 1] + Math.hypot(baseFt[i].x - baseFt[i - 1].x, baseFt[i].y - baseFt[i - 1].y));
+  }
+  const totalLenFt = cumFt[cumFt.length - 1];
+  if (totalLenFt === 0) return baseFt;
+  return baseFt.map((point, i) => {
+    const t = cumFt[i] / totalLenFt;
+    // Taper to zero at both ends, same reasoning as squigglePoints, so the
+    // wavy path still starts/ends exactly on the baseline's own endpoints.
+    const taper = Math.sin(t * Math.PI);
+    const offset = amplitudeFt * Math.sin((cumFt[i] / waveLengthFt) * Math.PI * 2) * taper;
+    const prev = baseFt[Math.max(0, i - 1)];
+    const next = baseFt[Math.min(baseFt.length - 1, i + 1)];
+    const dx = next.x - prev.x;
+    const dy = next.y - prev.y;
+    const tangentLen = Math.hypot(dx, dy) || 1;
+    const px = -dy / tangentLen;
+    const py = dx / tangentLen;
+    return { x: point.x + px * offset, y: point.y + py * offset };
+  });
+}
+
 // Returns the geometric path (in feet, start→end) used to render/hit-test
 // a line: a quadratic curve for cut/pass/screen (curveOffsetFt=0 renders as
-// a straight line), or the dribble squiggle.
+// a straight line), or the dribble squiggle — which itself rides along a
+// curved baseline once curveOffsetFt is non-zero (see squiggleAlongBase).
 function linePathPoints(line, pts) {
-  if (line.type === LINE_TYPES.DRIBBLE) return squigglePoints(pts.start, pts.end);
-  const controlFt = resolveControlPoint(pts.start, pts.end, line.curveOffsetFt || 0);
+  const curveOffsetFt = line.curveOffsetFt || 0;
+  if (line.type === LINE_TYPES.DRIBBLE) {
+    if (!curveOffsetFt) return squigglePoints(pts.start, pts.end);
+    const controlFt = resolveControlPoint(pts.start, pts.end, curveOffsetFt);
+    const chordLenFt = Math.hypot(pts.end.x - pts.start.x, pts.end.y - pts.start.y);
+    const baseSteps = Math.max(24, Math.round(chordLenFt / (3 / 8)));
+    return squiggleAlongBase(bezierSamplePoints(pts.start, controlFt, pts.end, baseSteps));
+  }
+  const controlFt = resolveControlPoint(pts.start, pts.end, curveOffsetFt);
   return bezierSamplePoints(pts.start, controlFt, pts.end);
 }
 
-// The curve handle's court-space position for a line (null for dribble
-// lines, which don't expose curve control). This is the point the visible
-// curve actually passes through (see resolveControlPoint's doc comment),
-// not the raw Bézier control point, so the handle sits exactly on the
-// curve the user sees and drags intuitively.
+// The curve handle's court-space position for a line. This is the point
+// the visible curve/baseline actually passes through (see
+// resolveControlPoint's doc comment), not the raw Bézier control point, so
+// the handle sits exactly on the curve the user sees and drags
+// intuitively — including for dribble lines, whose squiggle rides along
+// this same bent baseline.
 function lineControlPointFt(line, tokens) {
-  if (line.type === LINE_TYPES.DRIBBLE) return null;
   const pts = resolveLineEndpoints(line, tokens);
   if (!pts) return null;
   return offsetPointFt(pts.start, pts.end, line.curveOffsetFt || 0);
@@ -269,10 +308,10 @@ function drawLines(ctx, lines, tokens, map) {
   lines.forEach(line => drawLine(ctx, line, tokens, map));
 }
 
-// Draws the selected-line handles: a curve handle at the control point
-// (skipped for dribble lines, which don't support curving) and, when the
-// line's end isn't attached to a token, an endpoint handle so it can be
-// dragged independently.
+// Draws the selected-line handles: a curve handle at the control point and,
+// when the line's end isn't attached to a token, an endpoint handle so it
+// can be dragged independently. Every line type (including dribble) shows
+// a curve handle now — see linePathPoints/squiggleAlongBase.
 function drawLineHandles(ctx, line, tokens, map) {
   const pts = resolveLineEndpoints(line, tokens);
   if (!pts) return;
