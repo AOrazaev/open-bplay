@@ -1,21 +1,38 @@
-// Top-level wiring / bootstrap: canvas setup, token state, tray-driven
-// spawn-dragging, and pointer-driven move/remove interactions. Loaded last.
+// Top-level wiring / bootstrap: canvas setup, token/line state, tray-driven
+// spawn-dragging, tool-driven line-drawing, and pointer-driven move/remove
+// interactions. Loaded last.
 
 const courtCanvas = document.querySelector('#courtCanvas');
 const trayChips = [...document.querySelectorAll('.tray-chip')];
 const clearCourtBtn = document.querySelector('#clearCourt');
+const toolButtons = [...document.querySelectorAll('.tool-btn')];
 
 let tokens = [];
+let lines = [];
 let dragState = null; // { id, pointerId } — dragging an existing court token
 let spawnDrag = null; // { type, label, pointerId, preview: {x,y} | null } — dragging a new token in from the tray
+let lineDrag = null; // { type, originTokenId, pointerId, current: {x,y} } — drawing a new line from a token
+let activeTool = null; // one of LINE_TYPES, or null for plain move mode
 
 const redraw = setupCourtCanvas(courtCanvas, (ctx, map) => {
+  drawLines(ctx, lines, tokens, map);
   drawTokens(ctx, tokens, map);
   if (spawnDrag && spawnDrag.preview) {
     drawToken(ctx, { type: spawnDrag.type, label: spawnDrag.label, x: spawnDrag.preview.x, y: spawnDrag.preview.y }, map);
   }
+  if (lineDrag) {
+    const previewLine = { type: lineDrag.type, originTokenId: lineDrag.originTokenId, endTokenId: null, endPoint: lineDrag.current };
+    drawLine(ctx, previewLine, tokens, map, { preview: true });
+  }
   updateTrayState();
 });
+
+// Removes a token and cascades to any lines attached to it as either
+// endpoint, so a deleted token never leaves a dangling line reference.
+function removeToken(id) {
+  tokens = tokens.filter(t => t.id !== id);
+  lines = lines.filter(l => l.originTokenId !== id && l.endTokenId !== id);
+}
 
 function countOf(type) {
   return tokens.filter(t => t.type === type).length;
@@ -75,23 +92,54 @@ trayChips.forEach(chip => {
 
 clearCourtBtn.addEventListener('click', () => {
   tokens = [];
+  lines = [];
   dragState = null;
+  lineDrag = null;
   redraw();
 });
 
+// --- Tool palette: pick a line type to draw, or click the active tool
+// again to return to plain move mode. ------------------------------------
+
+function updateToolPalette() {
+  toolButtons.forEach(btn => btn.classList.toggle('active', btn.dataset.tool === activeTool));
+}
+
+toolButtons.forEach(btn => {
+  btn.addEventListener('click', () => {
+    activeTool = activeTool === btn.dataset.tool ? null : btn.dataset.tool;
+    updateToolPalette();
+  });
+});
+updateToolPalette();
+
 // --- Court: drag an existing token to move it, or drag it past the court
 // boundary to remove it (dropping outside deletes; dropping inside just
-// relocates it, matching the tray-spawn drop semantics). -----------------
+// relocates it, matching the tray-spawn drop semantics). When a line tool
+// is active, dragging from a token draws a line instead of moving it. -----
 
 courtCanvas.addEventListener('pointerdown', (e) => {
   const { x, y } = clientPointToFeet(courtCanvas, e.clientX, e.clientY);
   const hit = findTokenAt(tokens, x, y);
   if (!hit) return;
+
+  if (activeTool) {
+    lineDrag = { type: activeTool, originTokenId: hit.id, pointerId: e.pointerId, current: { x, y } };
+    courtCanvas.setPointerCapture(e.pointerId);
+    redraw();
+    return;
+  }
+
   dragState = { id: hit.id, pointerId: e.pointerId };
   courtCanvas.setPointerCapture(e.pointerId);
 });
 
 courtCanvas.addEventListener('pointermove', (e) => {
+  if (lineDrag && lineDrag.pointerId === e.pointerId) {
+    lineDrag.current = clientPointToFeet(courtCanvas, e.clientX, e.clientY);
+    redraw();
+    return;
+  }
   if (!dragState || dragState.pointerId !== e.pointerId) return;
   const token = tokens.find(t => t.id === dragState.id);
   if (!token) return;
@@ -102,13 +150,33 @@ courtCanvas.addEventListener('pointermove', (e) => {
   redraw();
 });
 
+// Minimum drag distance (feet) before a line is actually created, so a
+// pointerdown/pointerup on the same spot doesn't leave a zero-length line.
+const MIN_LINE_LENGTH_FT = 1;
+
 function endDrag(e) {
+  if (lineDrag && lineDrag.pointerId === e.pointerId) {
+    if (courtCanvas.hasPointerCapture(e.pointerId)) courtCanvas.releasePointerCapture(e.pointerId);
+    const { type, originTokenId, current } = lineDrag;
+    lineDrag = null;
+    const origin = tokens.find(t => t.id === originTokenId);
+    if (origin) {
+      const targetToken = findTokenAt(tokens.filter(t => t.id !== originTokenId), current.x, current.y);
+      const end = targetToken ? { x: targetToken.x, y: targetToken.y } : current;
+      if (Math.hypot(end.x - origin.x, end.y - origin.y) >= MIN_LINE_LENGTH_FT) {
+        lines.push(createLine(type, originTokenId, targetToken ? { tokenId: targetToken.id } : current));
+      }
+    }
+    redraw();
+    return;
+  }
+
   if (!dragState || dragState.pointerId !== e.pointerId) return;
   if (courtCanvas.hasPointerCapture(e.pointerId)) courtCanvas.releasePointerCapture(e.pointerId);
   const token = tokens.find(t => t.id === dragState.id);
   dragState = null;
   if (token && token.removing) {
-    tokens = tokens.filter(t => t.id !== token.id);
+    removeToken(token.id);
   } else if (token) {
     token.removing = false;
   }
@@ -120,10 +188,17 @@ courtCanvas.addEventListener('pointercancel', endDrag);
 
 courtCanvas.addEventListener('dblclick', (e) => {
   const { x, y } = clientPointToFeet(courtCanvas, e.clientX, e.clientY);
-  const hit = findTokenAt(tokens, x, y);
-  if (!hit) return;
-  tokens = tokens.filter(t => t.id !== hit.id);
-  redraw();
+  const hitToken = findTokenAt(tokens, x, y);
+  if (hitToken) {
+    removeToken(hitToken.id);
+    redraw();
+    return;
+  }
+  const hitLine = findLineAt(lines, tokens, x, y);
+  if (hitLine) {
+    lines = lines.filter(l => l.id !== hitLine.id);
+    redraw();
+  }
 });
 
 window.addEventListener('resize', redraw);

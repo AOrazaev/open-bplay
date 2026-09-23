@@ -121,6 +121,30 @@ body {
   cursor: pointer;
 }
 
+.tool-palette {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  flex-wrap: wrap;
+  padding: 12px 24px 0;
+}
+
+.tool-btn {
+  background: #1e2740;
+  color: var(--text);
+  border: 2px solid transparent;
+  border-radius: 8px;
+  padding: 6px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.tool-btn.active {
+  border-color: #3b82f6;
+  background: #24325a;
+}
+
 .hint {
   text-align: center;
   color: var(--muted);
