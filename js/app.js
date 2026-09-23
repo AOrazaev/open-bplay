@@ -14,6 +14,26 @@ const playsTreeEl = document.querySelector('#playsTree');
 
 let tokens = [];
 let lines = [];
+
+// Restore whatever was on the court at the end of the last session (if
+// anything), independent of the saved-plays library — a lightweight
+// autosave rather than a named play, so simply leaving the tab and
+// coming back doesn't lose in-progress work.
+const courtAutosave = loadCourtAutosave();
+if (courtAutosave) {
+  tokens = courtAutosave.tokens;
+  lines = courtAutosave.lines;
+}
+
+// Persists the current tokens/lines as the court autosave. Called after
+// every action that settles into a new stable state (a drag/create/
+// delete finishing, a play loading, Clear) rather than on every
+// intermediate redraw, so an in-progress drag isn't writing to
+// localStorage on every pointermove.
+function persistCourtState() {
+  persistCourtAutosave(tokens, lines);
+}
+
 let dragState = null; // { id, pointerId } — dragging an existing court token
 let spawnDrag = null; // { type, label, pointerId, preview: {x,y} | null } — dragging a new token in from the tray
 let lineDrag = null; // { type, originTokenId, pointerId, current: {x,y} } — drawing a new line from a token
@@ -45,6 +65,7 @@ const redraw = setupCourtCanvas(courtCanvas, (ctx, map) => {
 function removeToken(id) {
   tokens = tokens.filter(t => t.id !== id);
   lines = lines.filter(l => l.originTokenId !== id && l.endTokenId !== id);
+  persistCourtState();
 }
 
 function countOf(type) {
@@ -95,6 +116,7 @@ trayChips.forEach(chip => {
     spawnDrag = null;
     if (preview && countOf(dropType) < maxFor(dropType)) {
       tokens.push(createToken(dropType, label, preview.x, preview.y));
+      persistCourtState();
     }
     redraw();
   }
@@ -120,6 +142,7 @@ clearCourtBtn.addEventListener('click', () => {
   tokens = [];
   lines = [];
   resetInteractionState();
+  persistCourtState();
   redraw();
 });
 
@@ -303,6 +326,7 @@ function loadPlayEntry(entry) {
   playNameInput.value = entry.name;
   currentFolderId = entry.parentId;
   renderPlaysTree();
+  persistCourtState();
   redraw();
 }
 
@@ -454,6 +478,7 @@ function endDrag(e) {
   if (curveDrag && curveDrag.pointerId === e.pointerId) {
     if (courtCanvas.hasPointerCapture(e.pointerId)) courtCanvas.releasePointerCapture(e.pointerId);
     curveDrag = null;
+    persistCourtState();
     redraw();
     return;
   }
@@ -468,6 +493,7 @@ function endDrag(e) {
         line.endPoint = null;
       }
     }
+    persistCourtState();
     redraw();
     return;
   }
@@ -485,6 +511,7 @@ function endDrag(e) {
         // doesn't accidentally start a second line on their next drag.
         activeTool = null;
         updateToolPalette();
+        persistCourtState();
       }
     }
     redraw();
@@ -496,9 +523,10 @@ function endDrag(e) {
   const token = tokens.find(t => t.id === dragState.id);
   dragState = null;
   if (token && token.removing) {
-    removeToken(token.id);
+    removeToken(token.id); // persists internally
   } else if (token) {
     token.removing = false;
+    persistCourtState();
   }
   redraw();
 }
@@ -510,7 +538,7 @@ courtCanvas.addEventListener('dblclick', (e) => {
   const { x, y } = clientPointToFeet(courtCanvas, e.clientX, e.clientY);
   const hitToken = findTokenAt(tokens, x, y);
   if (hitToken) {
-    removeToken(hitToken.id);
+    removeToken(hitToken.id); // persists internally
     redraw();
     return;
   }
@@ -518,6 +546,7 @@ courtCanvas.addEventListener('dblclick', (e) => {
   if (hitLine) {
     if (selectedLineId === hitLine.id) selectedLineId = null;
     lines = lines.filter(l => l.id !== hitLine.id);
+    persistCourtState();
     redraw();
   }
 });

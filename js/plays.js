@@ -38,6 +38,25 @@ function loadLibrary() {
 // tested/migrated above.
 const PLAYS_VIEW_STATE_KEY = 'play-drawing-plays-view-state-v1';
 
+// The court's own working state (current tokens/lines, independent of
+// any saved play) — a lightweight autosave so a reload restores whatever
+// was on the court, the same way a saved play restores its own snapshot.
+const COURT_AUTOSAVE_KEY = 'play-drawing-court-autosave-v1';
+
+function loadCourtAutosave() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(COURT_AUTOSAVE_KEY));
+    if (saved && Array.isArray(saved.tokens) && Array.isArray(saved.lines)) {
+      return { tokens: saved.tokens, lines: saved.lines };
+    }
+  } catch (_) {}
+  return null;
+}
+
+function persistCourtAutosave(tokens, lines) {
+  localStorage.setItem(COURT_AUTOSAVE_KEY, JSON.stringify({ tokens, lines }));
+}
+
 function loadViewState() {
   try {
     const state = JSON.parse(localStorage.getItem(PLAYS_VIEW_STATE_KEY));
