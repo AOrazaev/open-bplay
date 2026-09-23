@@ -43,3 +43,39 @@ body {
   border-radius: 12px;
   touch-action: none;
 }
+
+.toolbar {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  flex-wrap: wrap;
+  padding: 16px 24px 0;
+}
+
+.toolbar button {
+  background: #3b82f6;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.toolbar button.secondary {
+  background: #1e2740;
+  color: var(--muted);
+}
+
+.toolbar button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.hint {
+  text-align: center;
+  color: var(--muted);
+  font-size: 13px;
+  margin: 0 0 16px;
+}

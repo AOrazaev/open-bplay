@@ -148,11 +148,37 @@ function drawCourt(ctx, widthPx, heightPx) {
   ctx.stroke();
 }
 
+// Converts a client (viewport) point — e.g. from a mouse/pointer event — to
+// court-space feet, accounting for the canvas's CSS display size possibly
+// differing from its backing-store pixel size (DPR scaling).
+function clientPointToFeet(canvas, clientX, clientY) {
+  const rect = canvas.getBoundingClientRect();
+  const map = courtToCanvas(canvas.width, canvas.height);
+  const xPx = ((clientX - rect.left) / rect.width) * canvas.width;
+  const yPx = ((clientY - rect.top) / rect.height) * canvas.height;
+  return map.toFt(xPx, yPx);
+}
+
+// Inverse of clientPointToFeet — converts a court-space feet point to a
+// client (viewport) point for the canvas's current on-screen size. Used by
+// tests to compute real mouse coordinates for a token at a known feet
+// position.
+function courtFeetToClientPoint(canvas, xFt, yFt) {
+  const rect = canvas.getBoundingClientRect();
+  const map = courtToCanvas(canvas.width, canvas.height);
+  const px = map.toPx(xFt, yFt);
+  return {
+    x: rect.left + (px.x / canvas.width) * rect.width,
+    y: rect.top + (px.y / canvas.height) * rect.height,
+  };
+}
+
 // Sizes the canvas's backing store for the current devicePixelRatio (so
-// lines stay crisp on high-DPI displays) and (re)draws the court. Returns a
-// `redraw()` function so callers (e.g. a resize listener) can repaint
-// without recomputing the DPR setup.
-function setupCourtCanvas(canvas) {
+// lines stay crisp on high-DPI displays), draws the court, then invokes an
+// optional `onAfterCourtDraw(ctx, map)` callback (e.g. to layer tokens on
+// top) before returning. Returns a `redraw()` function so callers (e.g. a
+// resize listener) can repaint on demand without recomputing the DPR setup.
+function setupCourtCanvas(canvas, onAfterCourtDraw) {
   const ctx = canvas.getContext('2d');
 
   function redraw() {
@@ -165,6 +191,7 @@ function setupCourtCanvas(canvas) {
       canvas.height = heightPx;
     }
     drawCourt(ctx, canvas.width, canvas.height);
+    if (onAfterCourtDraw) onAfterCourtDraw(ctx, courtToCanvas(canvas.width, canvas.height));
   }
 
   redraw();
