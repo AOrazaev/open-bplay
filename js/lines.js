@@ -85,7 +85,11 @@ function squigglePoints(startFt, endFt, amplitudeFt = 0.6, waveLengthFt = 3) {
   for (let i = 0; i <= steps; i++) {
     const t = i / steps;
     const alongFt = t * length;
-    const offset = amplitudeFt * Math.sin((alongFt / waveLengthFt) * Math.PI * 2);
+    // Taper the wave to zero at both ends (sin(t*PI)) so the path always
+    // starts/ends exactly on startFt/endFt, regardless of how the overall
+    // length divides into wavelengths.
+    const taper = Math.sin(t * Math.PI);
+    const offset = amplitudeFt * Math.sin((alongFt / waveLengthFt) * Math.PI * 2) * taper;
     points.push({
       x: startFt.x + ux * alongFt + px * offset,
       y: startFt.y + uy * alongFt + py * offset,
@@ -138,14 +142,19 @@ function drawLine(ctx, line, tokens, map, options = {}) {
 
   if (line.type === LINE_TYPES.DRIBBLE) {
     const squiggleFt = squigglePoints(pts.start, endFt);
+    const squigglePx = squiggleFt.map(pt => map.toPx(pt.x, pt.y));
     ctx.beginPath();
-    squiggleFt.forEach((pt, i) => {
-      const px = map.toPx(pt.x, pt.y);
+    squigglePx.forEach((px, i) => {
       if (i === 0) ctx.moveTo(px.x, px.y);
       else ctx.lineTo(px.x, px.y);
     });
     ctx.stroke();
-    drawArrowhead(ctx, startPx, endPx, arrowSizePx);
+    // Orient the arrowhead along the squiggle's actual final segment (not
+    // the straight start→end direction), so it stays attached to and
+    // aligned with where the wavy path really ends.
+    const lastFromPx = squigglePx[squigglePx.length - 2] || startPx;
+    const lastToPx = squigglePx[squigglePx.length - 1];
+    drawArrowhead(ctx, lastFromPx, lastToPx, arrowSizePx);
     ctx.restore();
     return;
   }

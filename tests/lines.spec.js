@@ -147,4 +147,31 @@ test.describe('Checkpoint 3 — draw movement lines', () => {
     const lineCount = await page.evaluate(() => lines.length);
     expect(lineCount).toBe(0);
   });
+
+  test('dribble squiggle path always starts and ends exactly on its endpoints', async ({ page }) => {
+    await page.goto('/');
+    // Try lengths that are and aren't clean multiples of the wavelength, to
+    // regression-test the taper that keeps the wavy path pinned to its
+    // start/end points instead of drifting past them (and leaving the
+    // arrowhead detached/misrotated at the tip).
+    const results = await page.evaluate(() => {
+      const start = { x: 5, y: 5 };
+      return [7, 10, 13.5, 22].map(length => {
+        const end = { x: start.x + length, y: start.y };
+        const path = squigglePoints(start, end);
+        return {
+          length,
+          first: path[0],
+          last: path[path.length - 1],
+        };
+      });
+    });
+
+    results.forEach(({ first, last, length }) => {
+      expect(first.x).toBeCloseTo(5, 6);
+      expect(first.y).toBeCloseTo(5, 6);
+      expect(last.x).toBeCloseTo(5 + length, 6);
+      expect(last.y).toBeCloseTo(5, 6);
+    });
+  });
 });
