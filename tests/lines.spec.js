@@ -243,6 +243,19 @@ test.describe('Checkpoint 3.1 — select, curve, and move drawn lines', () => {
 
     const curveOffsetFt = await page.evaluate(() => lines[0].curveOffsetFt);
     expect(curveOffsetFt).toBeCloseTo(8, 0);
+
+    // The visible curve must pass exactly through the dragged-to point at
+    // its midpoint (t=0.5) — not just "roughly" bulge toward it — since
+    // that's the whole point of redefining curveOffsetFt as an on-curve
+    // offset rather than a raw Bézier control-point offset.
+    const midOfCurve = await page.evaluate(() => {
+      const line = lines[0];
+      const pts = resolveLineEndpoints(line, tokens);
+      const controlFt = resolveControlPoint(pts.start, pts.end, line.curveOffsetFt);
+      return quadraticPoint(pts.start, controlFt, pts.end, 0.5);
+    });
+    expect(midOfCurve.x).toBeCloseTo(20, 5);
+    expect(midOfCurve.y).toBeCloseTo(38, 5);
   });
 
   test('dragging a selected line\'s free-endpoint handle moves its endpoint', async ({ page }) => {

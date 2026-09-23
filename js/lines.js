@@ -39,24 +39,36 @@ function resolveLineEndpoints(line, tokens) {
   return { start: { x: origin.x, y: origin.y }, end: line.endPoint };
 }
 
-// The control point of a line's curve: the midpoint of start→end, offset
-// perpendicular to that axis by curveOffsetFt. curveOffsetFt=0 collapses
-// this exactly onto the midpoint, which makes the resulting quadratic
-// Bézier curve identical to a straight line (see bezierSamplePoints).
-function resolveControlPoint(startFt, endFt, curveOffsetFt) {
+// Offsets the midpoint of start→end perpendicular to that axis by
+// distFt. Shared by the on-curve handle point and the raw Bézier control
+// point below, which are related but not equal — see resolveControlPoint.
+function offsetPointFt(startFt, endFt, distFt) {
   const midFt = { x: (startFt.x + endFt.x) / 2, y: (startFt.y + endFt.y) / 2 };
   const dx = endFt.x - startFt.x;
   const dy = endFt.y - startFt.y;
   const length = Math.hypot(dx, dy);
-  if (length === 0 || !curveOffsetFt) return midFt;
+  if (length === 0 || !distFt) return midFt;
   const px = -dy / length;
   const py = dx / length;
-  return { x: midFt.x + px * curveOffsetFt, y: midFt.y + py * curveOffsetFt };
+  return { x: midFt.x + px * distFt, y: midFt.y + py * distFt };
 }
 
-// Inverse of resolveControlPoint's offset: given a pointer position, finds
-// the curveOffsetFt that would place the control point at (the projection
-// of) that pointer. Used while dragging a line's curve handle.
+// curveOffsetFt is defined as the perpendicular distance (from the
+// straight start→end chord) of the point the visible curve actually
+// passes through at its midpoint (t=0.5) — i.e. what the user sees and
+// drags. For a quadratic Bézier, B(0.5) = 0.5*chordMidpoint + 0.5*M, so
+// hitting an on-curve offset of curveOffsetFt requires the *raw* control
+// point M to be offset by curveOffsetFt*2. curveOffsetFt=0 still collapses
+// this exactly onto the midpoint, so it renders/hit-tests identically to
+// a straight line.
+function resolveControlPoint(startFt, endFt, curveOffsetFt) {
+  return offsetPointFt(startFt, endFt, (curveOffsetFt || 0) * 2);
+}
+
+// Given a pointer position, finds the curveOffsetFt (on-curve, not raw
+// control-point offset — see resolveControlPoint) that would make the
+// curve pass through the projection of that pointer. Used while dragging
+// a line's curve handle.
 function perpendicularOffset(startFt, endFt, pointFt) {
   const dx = endFt.x - startFt.x;
   const dy = endFt.y - startFt.y;
@@ -137,12 +149,15 @@ function linePathPoints(line, pts) {
 }
 
 // The curve handle's court-space position for a line (null for dribble
-// lines, which don't expose curve control).
+// lines, which don't expose curve control). This is the point the visible
+// curve actually passes through (see resolveControlPoint's doc comment),
+// not the raw Bézier control point, so the handle sits exactly on the
+// curve the user sees and drags intuitively.
 function lineControlPointFt(line, tokens) {
   if (line.type === LINE_TYPES.DRIBBLE) return null;
   const pts = resolveLineEndpoints(line, tokens);
   if (!pts) return null;
-  return resolveControlPoint(pts.start, pts.end, line.curveOffsetFt || 0);
+  return offsetPointFt(pts.start, pts.end, line.curveOffsetFt || 0);
 }
 
 // Shortens a sampled path by pullBackFt, measured back from its last point
