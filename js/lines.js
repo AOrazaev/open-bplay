@@ -335,14 +335,29 @@ function drawLineHandles(ctx, line, tokens, map) {
 
   {
     const endPx = map.toPx(pts.end.x, pts.end.y);
-    ctx.beginPath();
-    ctx.arc(endPx.x, endPx.y, handleRadiusPx, 0, Math.PI * 2);
     if (line.endTokenId) {
-      // Attached: draw as an outline ring around the token instead of a
-      // filled dot, so the token underneath stays visible while still
-      // showing (and hit-testing) a draggable detach handle.
+      // Attached: draw a ring around (not on top of) the token, sized
+      // wider than it, with a dark halo underneath the accent stroke so
+      // it stays visible regardless of the token's own fill color
+      // (an accent-colored ring alone is invisible on offense tokens,
+      // which are filled with that same accent color).
+      const ringRadiusPx = TOKEN_RADIUS_FT * map.scale + Math.max(4, map.scale * 0.25);
+      ctx.beginPath();
+      ctx.arc(endPx.x, endPx.y, ringRadiusPx, 0, Math.PI * 2);
+      ctx.strokeStyle = '#0b1020';
+      ctx.lineWidth = Math.max(3, map.scale * 0.18);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(endPx.x, endPx.y, ringRadiusPx, 0, Math.PI * 2);
+      ctx.strokeStyle = '#3b82f6';
+      ctx.lineWidth = Math.max(1.5, map.scale * 0.08);
       ctx.stroke();
     } else {
+      ctx.beginPath();
+      ctx.arc(endPx.x, endPx.y, handleRadiusPx, 0, Math.PI * 2);
+      ctx.fillStyle = '#0b1020';
+      ctx.strokeStyle = '#3b82f6';
+      ctx.lineWidth = Math.max(1.5, map.scale * 0.08);
       ctx.fill();
       ctx.stroke();
     }
