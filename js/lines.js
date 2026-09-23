@@ -276,6 +276,11 @@ function drawLine(ctx, line, tokens, map, options = {}) {
 
   const lineWidthPx = Math.max(2, map.scale * 0.12);
   const arrowSizePx = Math.max(6, map.scale * 0.9);
+  // The screen tick is a standalone symbol (not just an arrowhead tip), so
+  // it needs to read clearly against a player token — sized close to the
+  // token's own diameter, and noticeably thicker than the line itself.
+  const tickSizePx = Math.max(10, map.scale * 1.3);
+  const tickLineWidthPx = Math.max(4, map.scale * 0.32);
 
   ctx.save();
   if (options.preview) ctx.globalAlpha = 0.55;
@@ -296,7 +301,8 @@ function drawLine(ctx, line, tokens, map, options = {}) {
   const tailFromPx = pathPx[pathPx.length - 2];
   const tailToPx = pathPx[pathPx.length - 1];
   if (line.type === LINE_TYPES.SCREEN) {
-    drawScreenTick(ctx, tailFromPx, tailToPx, arrowSizePx * 0.6);
+    ctx.lineWidth = tickLineWidthPx;
+    drawScreenTick(ctx, tailFromPx, tailToPx, tickSizePx);
   } else {
     drawArrowhead(ctx, tailFromPx, tailToPx, arrowSizePx);
   }
