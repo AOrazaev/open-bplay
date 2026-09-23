@@ -197,3 +197,101 @@ test.describe('Checkpoint 3 — draw movement lines', () => {
     });
   });
 });
+
+test.describe('Checkpoint 3.1 — select, curve, and move drawn lines', () => {
+  test.use({ viewport: { width: 900, height: 1000 } });
+
+  test('clicking a line selects it, and clicking empty space deselects it', async ({ page }) => {
+    await page.goto('/');
+    await spawnTokenAt(page, 'offense', 10, 30);
+    await page.locator('.tool-btn[data-tool="pass"]').click();
+    await dragFromTokenTo(page, 0, 35, 15);
+    await expect.poll(() => page.evaluate(() => lines.length)).toBe(1);
+
+    const midFt = { x: (10 + 35) / 2, y: (30 + 15) / 2 };
+    const midPoint = await toClientPoint(page, midFt.x, midFt.y);
+    await page.mouse.click(midPoint.x, midPoint.y);
+    const lineId = await page.evaluate(() => lines[0].id);
+    await expect.poll(() => page.evaluate(() => selectedLineId)).toBe(lineId);
+
+    const emptyPoint = await toClientPoint(page, 2, 2);
+    await page.mouse.click(emptyPoint.x, emptyPoint.y);
+    await expect.poll(() => page.evaluate(() => selectedLineId)).toBeNull();
+  });
+
+  test('dragging a selected line\'s curve handle bends it', async ({ page }) => {
+    await page.goto('/');
+    await spawnTokenAt(page, 'offense', 10, 30);
+    await page.locator('.tool-btn[data-tool="cut"]').click();
+    await dragFromTokenTo(page, 0, 30, 30); // horizontal line, straight along x
+    await expect.poll(() => page.evaluate(() => lines.length)).toBe(1);
+
+    // Select the line by clicking its (currently straight) midpoint.
+    const midPoint = await toClientPoint(page, 20, 30);
+    await page.mouse.click(midPoint.x, midPoint.y);
+    const lineId = await page.evaluate(() => lines[0].id);
+    await expect.poll(() => page.evaluate(() => selectedLineId)).toBe(lineId);
+
+    // Drag the curve handle (initially at the midpoint, since curveOffsetFt
+    // starts at 0) 8ft further along the court's y-axis — perpendicular to
+    // this horizontal line.
+    const targetPoint = await toClientPoint(page, 20, 38);
+    await page.mouse.move(midPoint.x, midPoint.y);
+    await page.mouse.down();
+    await page.mouse.move(targetPoint.x, targetPoint.y, { steps: 5 });
+    await page.mouse.up();
+
+    const curveOffsetFt = await page.evaluate(() => lines[0].curveOffsetFt);
+    expect(curveOffsetFt).toBeCloseTo(8, 0);
+  });
+
+  test('dragging a selected line\'s free-endpoint handle moves its endpoint', async ({ page }) => {
+    await page.goto('/');
+    await spawnTokenAt(page, 'offense', 10, 30);
+    await page.locator('.tool-btn[data-tool="pass"]').click();
+    await dragFromTokenTo(page, 0, 30, 15);
+    await expect.poll(() => page.evaluate(() => lines.length)).toBe(1);
+
+    const midPoint = await toClientPoint(page, 20, 22.5);
+    await page.mouse.click(midPoint.x, midPoint.y);
+    const lineId = await page.evaluate(() => lines[0].id);
+    await expect.poll(() => page.evaluate(() => selectedLineId)).toBe(lineId);
+
+    const endpointStart = await toClientPoint(page, 30, 15);
+    const endpointTarget = await toClientPoint(page, 25, 10);
+    await page.mouse.move(endpointStart.x, endpointStart.y);
+    await page.mouse.down();
+    await page.mouse.move(endpointTarget.x, endpointTarget.y, { steps: 5 });
+    await page.mouse.up();
+
+    const endPoint = await page.evaluate(() => lines[0].endPoint);
+    expect(endPoint.x).toBeCloseTo(25, 0);
+    expect(endPoint.y).toBeCloseTo(10, 0);
+  });
+
+  test('a token-to-token line has no free-endpoint handle to drag', async ({ page }) => {
+    await page.goto('/');
+    await spawnTokenAt(page, 'offense', 10, 30);
+    await spawnTokenAt(page, 'offense', 30, 30);
+    await page.locator('.tool-btn[data-tool="cut"]').click();
+    await dragFromTokenTo(page, 0, 30, 30);
+    await expect.poll(() => page.evaluate(() => lines.length)).toBe(1);
+
+    const midPoint = await toClientPoint(page, 20, 30);
+    await page.mouse.click(midPoint.x, midPoint.y);
+    await expect.poll(() => page.evaluate(() => selectedLineId)).not.toBeNull();
+
+    // Dragging near the attached token's own position should move the
+    // token itself (existing behavior), not an endpoint handle.
+    const endToken = await toClientPoint(page, 30, 30);
+    const target = await toClientPoint(page, 25, 25);
+    await page.mouse.move(endToken.x, endToken.y);
+    await page.mouse.down();
+    await page.mouse.move(target.x, target.y, { steps: 5 });
+    await page.mouse.up();
+
+    const secondTokenPos = await page.evaluate(() => ({ x: tokens[1].x, y: tokens[1].y }));
+    expect(secondTokenPos.x).toBeCloseTo(25, 0);
+    expect(secondTokenPos.y).toBeCloseTo(25, 0);
+  });
+});

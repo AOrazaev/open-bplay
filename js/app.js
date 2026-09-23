@@ -13,6 +13,9 @@ let dragState = null; // { id, pointerId } — dragging an existing court token
 let spawnDrag = null; // { type, label, pointerId, preview: {x,y} | null } — dragging a new token in from the tray
 let lineDrag = null; // { type, originTokenId, pointerId, current: {x,y} } — drawing a new line from a token
 let activeTool = null; // one of LINE_TYPES, or null for plain move mode
+let selectedLineId = null; // line currently showing its curve/endpoint handles
+let curveDrag = null; // { lineId, pointerId } — dragging a selected line's curve handle
+let endpointDrag = null; // { lineId, pointerId } — dragging a selected line's free-endpoint handle
 
 const redraw = setupCourtCanvas(courtCanvas, (ctx, map) => {
   drawLines(ctx, lines, tokens, map);
@@ -23,6 +26,11 @@ const redraw = setupCourtCanvas(courtCanvas, (ctx, map) => {
   if (lineDrag) {
     const previewLine = { type: lineDrag.type, originTokenId: lineDrag.originTokenId, endTokenId: null, endPoint: lineDrag.current };
     drawLine(ctx, previewLine, tokens, map, { preview: true });
+  }
+  if (selectedLineId) {
+    const selectedLine = lines.find(l => l.id === selectedLineId);
+    if (selectedLine) drawLineHandles(ctx, selectedLine, tokens, map);
+    else selectedLineId = null; // line was removed elsewhere (e.g. cascade delete)
   }
   updateTrayState();
 });
@@ -95,6 +103,9 @@ clearCourtBtn.addEventListener('click', () => {
   lines = [];
   dragState = null;
   lineDrag = null;
+  selectedLineId = null;
+  curveDrag = null;
+  endpointDrag = null;
   redraw();
 });
 
@@ -116,25 +127,72 @@ updateToolPalette();
 // --- Court: drag an existing token to move it, or drag it past the court
 // boundary to remove it (dropping outside deletes; dropping inside just
 // relocates it, matching the tray-spawn drop semantics). When a line tool
-// is active, dragging from a token draws a line instead of moving it. -----
+// is active, dragging from a token draws a line instead of moving it.
+// When no tool is active, clicking a line selects it (showing its curve
+// and/or free-endpoint handles) so those can be dragged to reshape it;
+// clicking empty space deselects. -----------------------------------------
 
 courtCanvas.addEventListener('pointerdown', (e) => {
   const { x, y } = clientPointToFeet(courtCanvas, e.clientX, e.clientY);
-  const hit = findTokenAt(tokens, x, y);
-  if (!hit) return;
 
-  if (activeTool) {
-    lineDrag = { type: activeTool, originTokenId: hit.id, pointerId: e.pointerId, current: { x, y } };
+  if (!activeTool && selectedLineId) {
+    const selectedLine = lines.find(l => l.id === selectedLineId);
+    if (selectedLine) {
+      const controlFt = lineControlPointFt(selectedLine, tokens);
+      if (controlFt && Math.hypot(x - controlFt.x, y - controlFt.y) <= LINE_HANDLE_HIT_RADIUS_FT) {
+        curveDrag = { lineId: selectedLine.id, pointerId: e.pointerId };
+        courtCanvas.setPointerCapture(e.pointerId);
+        return;
+      }
+      if (!selectedLine.endTokenId) {
+        const pts = resolveLineEndpoints(selectedLine, tokens);
+        if (pts && Math.hypot(x - pts.end.x, y - pts.end.y) <= LINE_HANDLE_HIT_RADIUS_FT) {
+          endpointDrag = { lineId: selectedLine.id, pointerId: e.pointerId };
+          courtCanvas.setPointerCapture(e.pointerId);
+          return;
+        }
+      }
+    }
+  }
+
+  const hit = findTokenAt(tokens, x, y);
+  if (hit) {
+    if (activeTool) {
+      lineDrag = { type: activeTool, originTokenId: hit.id, pointerId: e.pointerId, current: { x, y } };
+      courtCanvas.setPointerCapture(e.pointerId);
+      redraw();
+      return;
+    }
+    selectedLineId = null; // picking up a token deselects any line
+    dragState = { id: hit.id, pointerId: e.pointerId };
     courtCanvas.setPointerCapture(e.pointerId);
-    redraw();
     return;
   }
 
-  dragState = { id: hit.id, pointerId: e.pointerId };
-  courtCanvas.setPointerCapture(e.pointerId);
+  if (!activeTool) {
+    const hitLine = findLineAt(lines, tokens, x, y);
+    selectedLineId = hitLine ? hitLine.id : null;
+    redraw();
+  }
 });
 
 courtCanvas.addEventListener('pointermove', (e) => {
+  if (curveDrag && curveDrag.pointerId === e.pointerId) {
+    const line = lines.find(l => l.id === curveDrag.lineId);
+    const pts = line && resolveLineEndpoints(line, tokens);
+    if (pts) {
+      const { x, y } = clientPointToFeet(courtCanvas, e.clientX, e.clientY);
+      line.curveOffsetFt = perpendicularOffset(pts.start, pts.end, { x, y });
+    }
+    redraw();
+    return;
+  }
+  if (endpointDrag && endpointDrag.pointerId === e.pointerId) {
+    const line = lines.find(l => l.id === endpointDrag.lineId);
+    if (line) line.endPoint = clientPointToFeet(courtCanvas, e.clientX, e.clientY);
+    redraw();
+    return;
+  }
   if (lineDrag && lineDrag.pointerId === e.pointerId) {
     lineDrag.current = clientPointToFeet(courtCanvas, e.clientX, e.clientY);
     redraw();
@@ -155,6 +213,18 @@ courtCanvas.addEventListener('pointermove', (e) => {
 const MIN_LINE_LENGTH_FT = 1;
 
 function endDrag(e) {
+  if (curveDrag && curveDrag.pointerId === e.pointerId) {
+    if (courtCanvas.hasPointerCapture(e.pointerId)) courtCanvas.releasePointerCapture(e.pointerId);
+    curveDrag = null;
+    redraw();
+    return;
+  }
+  if (endpointDrag && endpointDrag.pointerId === e.pointerId) {
+    if (courtCanvas.hasPointerCapture(e.pointerId)) courtCanvas.releasePointerCapture(e.pointerId);
+    endpointDrag = null;
+    redraw();
+    return;
+  }
   if (lineDrag && lineDrag.pointerId === e.pointerId) {
     if (courtCanvas.hasPointerCapture(e.pointerId)) courtCanvas.releasePointerCapture(e.pointerId);
     const { type, originTokenId, current } = lineDrag;
@@ -200,6 +270,7 @@ courtCanvas.addEventListener('dblclick', (e) => {
   }
   const hitLine = findLineAt(lines, tokens, x, y);
   if (hitLine) {
+    if (selectedLineId === hitLine.id) selectedLineId = null;
     lines = lines.filter(l => l.id !== hitLine.id);
     redraw();
   }

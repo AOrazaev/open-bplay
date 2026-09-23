@@ -4,9 +4,15 @@
 // mirrors the split used for tokens.js.
 
 const LINE_TYPES = { CUT: 'cut', PASS: 'pass', SCREEN: 'screen', DRIBBLE: 'dribble' };
+// How close (in feet) a pointer must land to a line's curve/endpoint handle
+// to grab it, once the line is selected.
+const LINE_HANDLE_HIT_RADIUS_FT = 1.4;
 
 // `end` is either { tokenId } (line follows that token as it moves) or
-// { x, y } (line ends at a fixed court point).
+// { x, y } (line ends at a fixed court point). `curveOffsetFt` is the
+// perpendicular distance of the curve's control point from the straight
+// start→end axis (0 = straight); dribble lines ignore it since their
+// squiggle path is already non-straight.
 function createLine(type, originTokenId, end) {
   return {
     id: crypto.randomUUID(),
@@ -14,6 +20,7 @@ function createLine(type, originTokenId, end) {
     originTokenId,
     endTokenId: end.tokenId || null,
     endPoint: end.tokenId ? null : { x: end.x, y: end.y },
+    curveOffsetFt: 0,
   };
 }
 
@@ -32,6 +39,52 @@ function resolveLineEndpoints(line, tokens) {
   return { start: { x: origin.x, y: origin.y }, end: line.endPoint };
 }
 
+// The control point of a line's curve: the midpoint of start→end, offset
+// perpendicular to that axis by curveOffsetFt. curveOffsetFt=0 collapses
+// this exactly onto the midpoint, which makes the resulting quadratic
+// Bézier curve identical to a straight line (see bezierSamplePoints).
+function resolveControlPoint(startFt, endFt, curveOffsetFt) {
+  const midFt = { x: (startFt.x + endFt.x) / 2, y: (startFt.y + endFt.y) / 2 };
+  const dx = endFt.x - startFt.x;
+  const dy = endFt.y - startFt.y;
+  const length = Math.hypot(dx, dy);
+  if (length === 0 || !curveOffsetFt) return midFt;
+  const px = -dy / length;
+  const py = dx / length;
+  return { x: midFt.x + px * curveOffsetFt, y: midFt.y + py * curveOffsetFt };
+}
+
+// Inverse of resolveControlPoint's offset: given a pointer position, finds
+// the curveOffsetFt that would place the control point at (the projection
+// of) that pointer. Used while dragging a line's curve handle.
+function perpendicularOffset(startFt, endFt, pointFt) {
+  const dx = endFt.x - startFt.x;
+  const dy = endFt.y - startFt.y;
+  const length = Math.hypot(dx, dy);
+  if (length === 0) return 0;
+  const px = -dy / length;
+  const py = dx / length;
+  return (pointFt.x - startFt.x) * px + (pointFt.y - startFt.y) * py;
+}
+
+function quadraticPoint(startFt, controlFt, endFt, t) {
+  const mt = 1 - t;
+  return {
+    x: mt * mt * startFt.x + 2 * mt * t * controlFt.x + t * t * endFt.x,
+    y: mt * mt * startFt.y + 2 * mt * t * controlFt.y + t * t * endFt.y,
+  };
+}
+
+// Samples a quadratic Bézier curve from start to end via controlFt. When
+// controlFt is exactly the start→end midpoint this reduces mathematically
+// to the straight line between them, so curveOffsetFt=0 renders/hit-tests
+// identically to the old plain-line behavior.
+function bezierSamplePoints(startFt, controlFt, endFt, steps = 20) {
+  const points = [];
+  for (let i = 0; i <= steps; i++) points.push(quadraticPoint(startFt, controlFt, endFt, i / steps));
+  return points;
+}
+
 function distanceToSegment(px, py, ax, ay, bx, by) {
   const dx = bx - ax;
   const dy = by - ay;
@@ -41,30 +94,6 @@ function distanceToSegment(px, py, ax, ay, bx, by) {
   const cx = ax + t * dx;
   const cy = ay + t * dy;
   return Math.hypot(px - cx, py - cy);
-}
-
-// Finds the topmost (last-drawn) line within hitRadiusFt of the given
-// court-space point, approximating curved (dribble) lines with their
-// straight start→end segment, which is accurate enough for hit-testing.
-function findLineAt(lines, tokens, xFt, yFt, hitRadiusFt = 1.2) {
-  for (let i = lines.length - 1; i >= 0; i--) {
-    const pts = resolveLineEndpoints(lines[i], tokens);
-    if (!pts) continue;
-    const d = distanceToSegment(xFt, yFt, pts.start.x, pts.start.y, pts.end.x, pts.end.y);
-    if (d <= hitRadiusFt) return lines[i];
-  }
-  return null;
-}
-
-// Shortens the end point back toward the start by `pullBackFt`, so arrows
-// and ticks don't get drawn underneath the destination token's circle.
-function pullBackPoint(startFt, endFt, pullBackFt) {
-  const dx = endFt.x - startFt.x;
-  const dy = endFt.y - startFt.y;
-  const length = Math.hypot(dx, dy);
-  if (length <= pullBackFt) return { x: startFt.x, y: startFt.y };
-  const ratio = (length - pullBackFt) / length;
-  return { x: startFt.x + dx * ratio, y: startFt.y + dy * ratio };
 }
 
 // Samples a sine-wave "squiggle" path between two court-space points, used
@@ -98,6 +127,67 @@ function squigglePoints(startFt, endFt, amplitudeFt = 0.6, waveLengthFt = 3) {
   return points;
 }
 
+// Returns the geometric path (in feet, start→end) used to render/hit-test
+// a line: a quadratic curve for cut/pass/screen (curveOffsetFt=0 renders as
+// a straight line), or the dribble squiggle.
+function linePathPoints(line, pts) {
+  if (line.type === LINE_TYPES.DRIBBLE) return squigglePoints(pts.start, pts.end);
+  const controlFt = resolveControlPoint(pts.start, pts.end, line.curveOffsetFt || 0);
+  return bezierSamplePoints(pts.start, controlFt, pts.end);
+}
+
+// The curve handle's court-space position for a line (null for dribble
+// lines, which don't expose curve control).
+function lineControlPointFt(line, tokens) {
+  if (line.type === LINE_TYPES.DRIBBLE) return null;
+  const pts = resolveLineEndpoints(line, tokens);
+  if (!pts) return null;
+  return resolveControlPoint(pts.start, pts.end, line.curveOffsetFt || 0);
+}
+
+// Shortens a sampled path by pullBackFt, measured back from its last point
+// along the path itself (not a straight-line shortcut), so arrows/ticks
+// stay attached to curved and wavy paths alike.
+function trimPathEnd(pathFt, pullBackFt) {
+  if (pathFt.length < 2 || pullBackFt <= 0) return pathFt;
+  const trimmed = pathFt.slice();
+  let remaining = pullBackFt;
+  while (trimmed.length > 1 && remaining > 0) {
+    const last = trimmed[trimmed.length - 1];
+    const prev = trimmed[trimmed.length - 2];
+    const segLen = Math.hypot(last.x - prev.x, last.y - prev.y);
+    if (segLen <= remaining) {
+      trimmed.pop();
+      remaining -= segLen;
+    } else {
+      const ratio = (segLen - remaining) / segLen;
+      trimmed[trimmed.length - 1] = { x: prev.x + (last.x - prev.x) * ratio, y: prev.y + (last.y - prev.y) * ratio };
+      remaining = 0;
+    }
+  }
+  return trimmed;
+}
+
+// Finds the topmost (last-drawn) line within hitRadiusFt of the given
+// court-space point, sampling each line's actual curved/wavy path so
+// clicks land correctly even where a bent line bulges away from its
+// straight start→end axis.
+function findLineAt(lines, tokens, xFt, yFt, hitRadiusFt = 1.2) {
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const line = lines[i];
+    const pts = resolveLineEndpoints(line, tokens);
+    if (!pts) continue;
+    const pathFt = linePathPoints(line, pts);
+    let minDist = Infinity;
+    for (let s = 0; s < pathFt.length - 1; s++) {
+      const d = distanceToSegment(xFt, yFt, pathFt[s].x, pathFt[s].y, pathFt[s + 1].x, pathFt[s + 1].y);
+      if (d < minDist) minDist = d;
+    }
+    if (minDist <= hitRadiusFt) return line;
+  }
+  return null;
+}
+
 function drawArrowhead(ctx, fromPx, toPx, sizePx) {
   const angle = Math.atan2(toPx.y - fromPx.y, toPx.x - fromPx.x);
   const spread = Math.PI / 7;
@@ -126,9 +216,10 @@ function drawLine(ctx, line, tokens, map, options = {}) {
   if (!pts) return;
 
   const pullBackFt = line.endTokenId ? TOKEN_RADIUS_FT * 1.1 : 0;
-  const endFt = pullBackPoint(pts.start, pts.end, pullBackFt);
-  const startPx = map.toPx(pts.start.x, pts.start.y);
-  const endPx = map.toPx(endFt.x, endFt.y);
+  const pathFt = trimPathEnd(linePathPoints(line, pts), pullBackFt);
+  if (pathFt.length < 2) return;
+  const pathPx = pathFt.map(p => map.toPx(p.x, p.y));
+
   const lineWidthPx = Math.max(2, map.scale * 0.12);
   const arrowSizePx = Math.max(6, map.scale * 0.9);
 
@@ -138,41 +229,22 @@ function drawLine(ctx, line, tokens, map, options = {}) {
   ctx.fillStyle = '#f6f7fb';
   ctx.lineWidth = lineWidthPx;
   ctx.lineCap = 'round';
-  ctx.setLineDash([]);
-
-  if (line.type === LINE_TYPES.DRIBBLE) {
-    const squiggleFt = squigglePoints(pts.start, endFt);
-    const squigglePx = squiggleFt.map(pt => map.toPx(pt.x, pt.y));
-    ctx.beginPath();
-    squigglePx.forEach((px, i) => {
-      if (i === 0) ctx.moveTo(px.x, px.y);
-      else ctx.lineTo(px.x, px.y);
-    });
-    ctx.stroke();
-    // Orient the arrowhead along the squiggle's actual final segment (not
-    // the straight start→end direction), so it stays attached to and
-    // aligned with where the wavy path really ends.
-    const lastFromPx = squigglePx[squigglePx.length - 2] || startPx;
-    const lastToPx = squigglePx[squigglePx.length - 1];
-    drawArrowhead(ctx, lastFromPx, lastToPx, arrowSizePx);
-    ctx.restore();
-    return;
-  }
-
-  if (line.type === LINE_TYPES.PASS) {
-    ctx.setLineDash([lineWidthPx * 1.8, lineWidthPx * 1.4]);
-  }
+  ctx.setLineDash(line.type === LINE_TYPES.PASS ? [lineWidthPx * 1.8, lineWidthPx * 1.4] : []);
 
   ctx.beginPath();
-  ctx.moveTo(startPx.x, startPx.y);
-  ctx.lineTo(endPx.x, endPx.y);
+  pathPx.forEach((px, i) => (i === 0 ? ctx.moveTo(px.x, px.y) : ctx.lineTo(px.x, px.y)));
   ctx.stroke();
   ctx.setLineDash([]);
 
+  // Orient the arrowhead/tick along the path's actual final segment (not a
+  // straight start→end direction), so it stays attached to and aligned
+  // with curved or wavy lines alike.
+  const tailFromPx = pathPx[pathPx.length - 2];
+  const tailToPx = pathPx[pathPx.length - 1];
   if (line.type === LINE_TYPES.SCREEN) {
-    drawScreenTick(ctx, startPx, endPx, arrowSizePx * 0.6);
+    drawScreenTick(ctx, tailFromPx, tailToPx, arrowSizePx * 0.6);
   } else {
-    drawArrowhead(ctx, startPx, endPx, arrowSizePx);
+    drawArrowhead(ctx, tailFromPx, tailToPx, arrowSizePx);
   }
 
   ctx.restore();
@@ -181,3 +253,38 @@ function drawLine(ctx, line, tokens, map, options = {}) {
 function drawLines(ctx, lines, tokens, map) {
   lines.forEach(line => drawLine(ctx, line, tokens, map));
 }
+
+// Draws the selected-line handles: a curve handle at the control point
+// (skipped for dribble lines, which don't support curving) and, when the
+// line's end isn't attached to a token, an endpoint handle so it can be
+// dragged independently.
+function drawLineHandles(ctx, line, tokens, map) {
+  const pts = resolveLineEndpoints(line, tokens);
+  if (!pts) return;
+  const handleRadiusPx = Math.max(5, map.scale * 0.7);
+
+  ctx.save();
+  ctx.fillStyle = '#0b1020';
+  ctx.strokeStyle = '#3b82f6';
+  ctx.lineWidth = Math.max(1.5, map.scale * 0.08);
+
+  const controlFt = lineControlPointFt(line, tokens);
+  if (controlFt) {
+    const controlPx = map.toPx(controlFt.x, controlFt.y);
+    ctx.beginPath();
+    ctx.arc(controlPx.x, controlPx.y, handleRadiusPx, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+  }
+
+  if (!line.endTokenId) {
+    const endPx = map.toPx(pts.end.x, pts.end.y);
+    ctx.beginPath();
+    ctx.arc(endPx.x, endPx.y, handleRadiusPx, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+  }
+
+  ctx.restore();
+}
+
