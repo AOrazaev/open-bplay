@@ -1,49 +1,76 @@
-// Top-level wiring / bootstrap: canvas setup, token state, toolbar buttons,
-// and pointer-driven drag/remove interactions. Loaded last.
+// Top-level wiring / bootstrap: canvas setup, token state, tray-driven
+// spawn-dragging, and pointer-driven move/remove interactions. Loaded last.
 
 const courtCanvas = document.querySelector('#courtCanvas');
-const addOffenseBtn = document.querySelector('#addOffense');
-const addDefenseBtn = document.querySelector('#addDefense');
-const addBallBtn = document.querySelector('#addBall');
+const trayChips = [...document.querySelectorAll('.tray-chip')];
 const clearCourtBtn = document.querySelector('#clearCourt');
 
 let tokens = [];
-let dragState = null; // { id, pointerId }
+let dragState = null; // { id, pointerId } — dragging an existing court token
+let spawnDrag = null; // { type, label, pointerId, preview: {x,y} | null } — dragging a new token in from the tray
 
 const redraw = setupCourtCanvas(courtCanvas, (ctx, map) => {
   drawTokens(ctx, tokens, map);
-  updateToolbarState();
+  if (spawnDrag && spawnDrag.preview) {
+    drawToken(ctx, { type: spawnDrag.type, label: spawnDrag.label, x: spawnDrag.preview.x, y: spawnDrag.preview.y }, map);
+  }
+  updateTrayState();
 });
 
-function updateToolbarState() {
-  const offenseCount = tokens.filter(t => t.type === TOKEN_TYPES.OFFENSE).length;
-  const defenseCount = tokens.filter(t => t.type === TOKEN_TYPES.DEFENSE).length;
-  const ballCount = tokens.filter(t => t.type === TOKEN_TYPES.BALL).length;
-  addOffenseBtn.disabled = offenseCount >= MAX_OFFENSE_TOKENS;
-  addDefenseBtn.disabled = defenseCount >= MAX_DEFENSE_TOKENS;
-  addBallBtn.disabled = ballCount >= 1;
+function countOf(type) {
+  return tokens.filter(t => t.type === type).length;
 }
 
-addOffenseBtn.addEventListener('click', () => {
-  const count = tokens.filter(t => t.type === TOKEN_TYPES.OFFENSE).length;
-  if (count >= MAX_OFFENSE_TOKENS) return;
-  const spot = nextOffenseSpot(count);
-  tokens.push(createToken(TOKEN_TYPES.OFFENSE, String(count + 1), spot.x, spot.y));
-  redraw();
-});
+function maxFor(type) {
+  if (type === TOKEN_TYPES.OFFENSE) return MAX_OFFENSE_TOKENS;
+  if (type === TOKEN_TYPES.DEFENSE) return MAX_DEFENSE_TOKENS;
+  return 1; // ball
+}
 
-addDefenseBtn.addEventListener('click', () => {
-  const count = tokens.filter(t => t.type === TOKEN_TYPES.DEFENSE).length;
-  if (count >= MAX_DEFENSE_TOKENS) return;
-  const spot = nextDefenseSpot(count);
-  tokens.push(createToken(TOKEN_TYPES.DEFENSE, '', spot.x, spot.y));
-  redraw();
-});
+function updateTrayState() {
+  trayChips.forEach(chip => {
+    const type = chip.dataset.type;
+    const atCap = countOf(type) >= maxFor(type);
+    chip.classList.toggle('disabled', atCap);
+    chip.setAttribute('aria-disabled', String(atCap));
+    const countEl = chip.querySelector('.tray-chip-count');
+    countEl.textContent = `${countOf(type)}/${maxFor(type)}`;
+  });
+}
 
-addBallBtn.addEventListener('click', () => {
-  if (tokens.some(t => t.type === TOKEN_TYPES.BALL)) return;
-  tokens.push(createToken(TOKEN_TYPES.BALL, '', COURT_WIDTH_FT / 2, COURT_LENGTH_FT - 20));
-  redraw();
+// --- Tray: drag a template chip onto the court to spawn a new token -----
+
+trayChips.forEach(chip => {
+  const type = chip.dataset.type;
+
+  chip.addEventListener('pointerdown', (e) => {
+    if (countOf(type) >= maxFor(type)) return;
+    const label = type === TOKEN_TYPES.OFFENSE ? String(countOf(type) + 1) : '';
+    spawnDrag = { type, label, pointerId: e.pointerId, preview: null };
+    chip.setPointerCapture(e.pointerId);
+    redraw();
+  });
+
+  chip.addEventListener('pointermove', (e) => {
+    if (!spawnDrag || spawnDrag.pointerId !== e.pointerId) return;
+    const { x, y } = clientPointToFeet(courtCanvas, e.clientX, e.clientY);
+    spawnDrag.preview = isWithinCourt(x, y) ? { x, y } : null;
+    redraw();
+  });
+
+  function endSpawnDrag(e) {
+    if (!spawnDrag || spawnDrag.pointerId !== e.pointerId) return;
+    if (chip.hasPointerCapture(e.pointerId)) chip.releasePointerCapture(e.pointerId);
+    const { type: dropType, label, preview } = spawnDrag;
+    spawnDrag = null;
+    if (preview && countOf(dropType) < maxFor(dropType)) {
+      tokens.push(createToken(dropType, label, preview.x, preview.y));
+    }
+    redraw();
+  }
+
+  chip.addEventListener('pointerup', endSpawnDrag);
+  chip.addEventListener('pointercancel', endSpawnDrag);
 });
 
 clearCourtBtn.addEventListener('click', () => {
@@ -51,6 +78,10 @@ clearCourtBtn.addEventListener('click', () => {
   dragState = null;
   redraw();
 });
+
+// --- Court: drag an existing token to move it, or drag it past the court
+// boundary to remove it (dropping outside deletes; dropping inside just
+// relocates it, matching the tray-spawn drop semantics). -----------------
 
 courtCanvas.addEventListener('pointerdown', (e) => {
   const { x, y } = clientPointToFeet(courtCanvas, e.clientX, e.clientY);
@@ -65,16 +96,23 @@ courtCanvas.addEventListener('pointermove', (e) => {
   const token = tokens.find(t => t.id === dragState.id);
   if (!token) return;
   const { x, y } = clientPointToFeet(courtCanvas, e.clientX, e.clientY);
-  const clamped = clampToCourt(x, y);
-  token.x = clamped.x;
-  token.y = clamped.y;
+  token.x = x;
+  token.y = y;
+  token.removing = !isWithinCourt(x, y);
   redraw();
 });
 
 function endDrag(e) {
   if (!dragState || dragState.pointerId !== e.pointerId) return;
   if (courtCanvas.hasPointerCapture(e.pointerId)) courtCanvas.releasePointerCapture(e.pointerId);
+  const token = tokens.find(t => t.id === dragState.id);
   dragState = null;
+  if (token && token.removing) {
+    tokens = tokens.filter(t => t.id !== token.id);
+  } else if (token) {
+    token.removing = false;
+  }
+  redraw();
 }
 
 courtCanvas.addEventListener('pointerup', endDrag);

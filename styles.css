@@ -44,33 +44,81 @@ body {
   touch-action: none;
 }
 
-.toolbar {
+.tray {
   display: flex;
-  gap: 10px;
+  align-items: center;
+  gap: 14px;
   justify-content: center;
   flex-wrap: wrap;
   padding: 16px 24px 0;
 }
 
-.toolbar button {
-  background: #3b82f6;
+.tray-chip {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: #1e2740;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.tray-chip:active {
+  cursor: grabbing;
+}
+
+.tray-chip.disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.tray-chip-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 18px;
   color: #fff;
+}
+
+.tray-chip-offense {
+  background: #3b82f6;
+}
+
+.tray-chip-defense {
+  background: transparent;
+  color: #ff6b6b;
+  border: 3px solid #ff6b6b;
+}
+
+.tray-chip-ball {
+  background: #f5a623;
+  width: 22px;
+  height: 22px;
+  align-self: center;
+  margin: 6px 0;
+}
+
+.tray-chip-count {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.tray button#clearCourt {
+  background: #1e2740;
+  color: var(--muted);
   border: none;
   border-radius: 8px;
   padding: 8px 16px;
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
-}
-
-.toolbar button.secondary {
-  background: #1e2740;
-  color: var(--muted);
-}
-
-.toolbar button:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
 }
 
 .hint {
