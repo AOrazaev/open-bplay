@@ -143,4 +143,36 @@ test.describe('Checkpoint 2 — tray-driven place & drag tokens', () => {
     await expect(page.locator('.tray-chip[data-type="defense"]')).not.toHaveClass(/disabled/);
     await expect(page.locator('.tray-chip[data-type="ball"]')).not.toHaveClass(/disabled/);
   });
+
+  test('a ball drawn on top of a player is nudged away from the hoop, not centered on the player', async ({ page }) => {
+    await page.goto('/');
+    const result = await page.evaluate(() => {
+      const player = { id: 'p1', type: 'offense', label: '1', x: HOOP_FT.x, y: HOOP_FT.y - 15 };
+      const ball = { id: 'b1', type: 'ball', x: player.x, y: player.y };
+      const pos = ballDrawPositionFt(ball, [player]);
+      return {
+        pos,
+        playerY: player.y,
+        distFromPlayer: Math.hypot(pos.x - player.x, pos.y - player.y),
+        tokenRadiusFt: TOKEN_RADIUS_FT,
+      };
+    });
+    // The player is directly above the hoop, so "away from the hoop" is
+    // further up-court (smaller y) — the nudge should move the ball's
+    // drawn y below the player's... i.e. away along that same ray.
+    expect(result.pos.y).toBeLessThan(result.playerY);
+    expect(result.distFromPlayer).toBeGreaterThan(0);
+    expect(result.distFromPlayer).toBeLessThan(result.tokenRadiusFt);
+  });
+
+  test('a ball far from any player is drawn at its own position, unaffected', async ({ page }) => {
+    await page.goto('/');
+    const result = await page.evaluate(() => {
+      const player = { id: 'p1', type: 'offense', label: '1', x: 10, y: 10 };
+      const ball = { id: 'b1', type: 'ball', x: 30, y: 30 };
+      return ballDrawPositionFt(ball, [player]);
+    });
+    expect(result.x).toBe(30);
+    expect(result.y).toBe(30);
+  });
 });

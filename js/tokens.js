@@ -6,6 +6,15 @@ const TOKEN_TYPES = { OFFENSE: 'offense', DEFENSE: 'defense', BALL: 'ball' };
 const TOKEN_RADIUS_FT = 1.3;
 const MAX_OFFENSE_TOKENS = 5;
 const MAX_DEFENSE_TOKENS = 5;
+// How close a ball token's center must be to a player's before we treat it
+// as "held by" that player for drawing purposes (e.g. right after a
+// dribble/pass arrow is applied, which moves both to the same point).
+const BALL_CARRY_THRESHOLD_FT = TOKEN_RADIUS_FT;
+// How far, in feet, a carried ball is nudged away from the hoop — enough
+// to read as offset from the player's number rather than dead-center on
+// it, while still overlapping the player (per design: "intersects, but
+// not on the dot center").
+const BALL_CARRY_OFFSET_FT = TOKEN_RADIUS_FT * 0.85;
 
 function createToken(type, label, xFt, yFt) {
   return { id: crypto.randomUUID(), type, label: label || '', x: xFt, y: yFt };
@@ -78,7 +87,37 @@ function drawTokens(ctx, tokens, map) {
   const players = tokens.filter(t => t.type !== TOKEN_TYPES.BALL);
   const balls = tokens.filter(t => t.type === TOKEN_TYPES.BALL);
   players.forEach(token => drawToken(ctx, token, map));
-  balls.forEach(token => drawToken(ctx, token, map));
+  balls.forEach(token => {
+    const pos = ballDrawPositionFt(token, players);
+    drawToken(ctx, pos === token ? token : { ...token, x: pos.x, y: pos.y }, map);
+  });
+}
+
+// When a ball sits on/near a player (e.g. right after applying a
+// dribble/pass arrow, which moves both to the same point), returns a
+// nudged { x, y } for *drawing only* — offset away from the hoop along the
+// ray from HOOP_FT through the player, so the ball reads as held out
+// toward half-court rather than centered on the player's number. Actual
+// token data (and hit-testing) are untouched; only the drawn pixel moves.
+// Returns the original token unchanged when no player is close enough.
+function ballDrawPositionFt(ballToken, playerTokens) {
+  const carrier = playerTokens.find(
+    t => Math.hypot(t.x - ballToken.x, t.y - ballToken.y) <= BALL_CARRY_THRESHOLD_FT
+  );
+  if (!carrier) return ballToken;
+
+  let dx = carrier.x - HOOP_FT.x;
+  let dy = carrier.y - HOOP_FT.y;
+  const dist = Math.hypot(dx, dy);
+  if (dist < 0.01) {
+    // Degenerate case: carrier is essentially standing on the hoop.
+    dx = 0;
+    dy = -1;
+  } else {
+    dx /= dist;
+    dy /= dist;
+  }
+  return { x: carrier.x + dx * BALL_CARRY_OFFSET_FT, y: carrier.y + dy * BALL_CARRY_OFFSET_FT };
 }
 
 // Finds the topmost (last-drawn) token within hitRadiusFt of the given

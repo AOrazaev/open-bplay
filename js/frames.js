@@ -16,8 +16,10 @@ function cloneFrame(frame) {
 // in `frame` as a movement, rather than just duplicating positions
 // as-is (that's what plain "+ Frame" does). A cut/dribble/screen line
 // moves its own origin token to the line's endpoint — that's the player
-// performing the action. A pass line instead moves the ball token (only
-// when there's exactly one on the court — otherwise there's no
+// performing the action. A dribble line also drags along any ball token
+// that was in that player's hands beforehand, so the ball doesn't get
+// left behind mid-dribble. A pass line instead moves the ball token
+// (only when there's exactly one on the court — otherwise there's no
 // unambiguous "the ball" to move) to the endpoint, since a pass is the
 // ball changing hands, not the passer relocating. Tokens with no line
 // keep their position (e.g. a defender who didn't move, or the ball
@@ -43,6 +45,22 @@ function advanceFrameByArrows(frame) {
     if (mover) {
       mover.x = pts.end.x;
       mover.y = pts.end.y;
+    }
+    if (line.type === LINE_TYPES.DRIBBLE) {
+      // Dribbling means the ball travels with the player, not just the
+      // player's own dot — move any ball token that was in the player's
+      // hands (i.e. co-located with them) before the move to the same
+      // endpoint, so it doesn't get left behind.
+      const originalOrigin = frame.tokens.find(t => t.id === line.originTokenId);
+      if (originalOrigin) {
+        newTokens
+          .filter(t => t.type === TOKEN_TYPES.BALL &&
+            Math.hypot(t.x - originalOrigin.x, t.y - originalOrigin.y) <= BALL_CARRY_THRESHOLD_FT)
+          .forEach(ball => {
+            ball.x = pts.end.x;
+            ball.y = pts.end.y;
+          });
+      }
     }
   });
 

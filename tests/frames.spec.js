@@ -262,6 +262,34 @@ test.describe('Checkpoint 6 — multi-step plays (frames)', () => {
     expect(state.lineCount).toBe(0);
   });
 
+  test('Apply Arrows carries the ball along with a dribble line, so it is not left behind', async ({ page }) => {
+    // Exercises advanceFrameByArrows directly (rather than drawing a real
+    // line via the UI) because the player and ball start at the exact
+    // same point here, and clicking to start a drag would grab whichever
+    // token is last in the array — a separate hit-testing detail, not
+    // what this test is about.
+    await page.goto('/');
+    const result = await page.evaluate(() => {
+      const frame = {
+        tokens: [
+          { id: 'player', type: 'offense', label: '1', x: 10, y: 30 },
+          { id: 'ball', type: 'ball', x: 10, y: 30 }, // in the dribbler's hands
+        ],
+        lines: [
+          { id: 'l1', type: 'dribble', originTokenId: 'player', endTokenId: null, endPoint: { x: 30, y: 20 } },
+        ],
+      };
+      const advanced = advanceFrameByArrows(frame);
+      const player = advanced.tokens.find(t => t.id === 'player');
+      const ball = advanced.tokens.find(t => t.id === 'ball');
+      return { player: { x: player.x, y: player.y }, ball: { x: ball.x, y: ball.y } };
+    });
+    expect(result.player.x).toBeCloseTo(30, 0);
+    expect(result.player.y).toBeCloseTo(20, 0);
+    expect(result.ball.x).toBeCloseTo(30, 0);
+    expect(result.ball.y).toBeCloseTo(20, 0);
+  });
+
   test('Apply Arrows moves the ball (not the passer) along a pass line', async ({ page }) => {
     await page.goto('/');
     await spawnTokenAt(page, 'offense', 10, 30); // passer

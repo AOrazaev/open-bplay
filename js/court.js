@@ -10,6 +10,10 @@ const COURT_WIDTH_FT = 50;
 const COURT_LENGTH_FT = 47;
 const THREE_POINT_ARC_RADIUS_FT = 23.75;
 const THREE_POINT_CORNER_X_FT = 3;
+// The hoop is set 5.25ft off the baseline — used both for court markings
+// below and, in js/tokens.js, to orient the ball's draw-time offset away
+// from the basket when it overlaps a player token.
+const HOOP_FT = { x: COURT_WIDTH_FT / 2, y: COURT_LENGTH_FT - 5.25 };
 
 // Geometry for the three-point line's straight corner segments and the arc
 // joining them: the corner segment's top endpoint must sit exactly
@@ -98,10 +102,8 @@ function drawCourt(ctx, widthPx, heightPx) {
   ctx.stroke();
   ctx.setLineDash([]);
 
-  // Restricted area arc under the basket, radius 4ft, hoop set 5.25ft off
-  // the baseline.
-  const hoopFt = { x: COURT_WIDTH_FT / 2, y: COURT_LENGTH_FT - 5.25 };
-  const hoopPx = map.toPx(hoopFt.x, hoopFt.y);
+  // Restricted area arc under the basket, radius 4ft.
+  const hoopPx = map.toPx(HOOP_FT.x, HOOP_FT.y);
   ctx.beginPath();
   ctx.arc(hoopPx.x, hoopPx.y, 4 * map.scale, Math.PI, 0);
   ctx.stroke();
@@ -118,7 +120,7 @@ function drawCourt(ctx, widthPx, heightPx) {
 
   // Three-point line: corner segments straight up from the baseline, joined
   // by an arc of radius 23.75ft centered on the hoop.
-  const { cornerXFt, leftCornerTopFt, rightCornerTopFt } = threePointGeometry(hoopFt);
+  const { cornerXFt, leftCornerTopFt, rightCornerTopFt } = threePointGeometry(HOOP_FT);
   const leftCornerTopPx = map.toPx(leftCornerTopFt.x, leftCornerTopFt.y);
   const rightCornerTopPx = map.toPx(rightCornerTopFt.x, rightCornerTopFt.y);
   const leftBaselinePx = map.toPx(cornerXFt, COURT_LENGTH_FT);
@@ -133,8 +135,8 @@ function drawCourt(ctx, widthPx, heightPx) {
   ctx.lineTo(rightCornerTopPx.x, rightCornerTopPx.y);
   ctx.stroke();
 
-  const angleToLeftCorner = Math.atan2(leftCornerTopFt.y - hoopFt.y, leftCornerTopFt.x - hoopFt.x);
-  const angleToRightCorner = Math.atan2(rightCornerTopFt.y - hoopFt.y, rightCornerTopFt.x - hoopFt.x);
+  const angleToLeftCorner = Math.atan2(leftCornerTopFt.y - HOOP_FT.y, leftCornerTopFt.x - HOOP_FT.x);
+  const angleToRightCorner = Math.atan2(rightCornerTopFt.y - HOOP_FT.y, rightCornerTopFt.x - HOOP_FT.x);
   ctx.beginPath();
   ctx.arc(hoopPx.x, hoopPx.y, THREE_POINT_ARC_RADIUS_FT * map.scale, angleToLeftCorner, angleToRightCorner);
   ctx.stroke();
