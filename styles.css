@@ -145,17 +145,58 @@ body {
   background: #24325a;
 }
 
-.plays-panel {
+.app-layout {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  justify-content: center;
-  flex-wrap: wrap;
-  padding: 12px 24px 0;
+  align-items: flex-start;
+  gap: 20px;
+  padding: 0 24px 24px;
 }
 
-.plays-panel input,
-.plays-panel select {
+.main-panel {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.main-panel .court-wrap {
+  padding: 24px 0;
+}
+
+.main-panel .tray,
+.main-panel .tool-palette {
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.sidebar {
+  flex: 0 0 240px;
+  background: var(--card);
+  border-radius: 12px;
+  padding: 16px;
+  margin-top: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.sidebar-title {
+  margin: 0;
+  font-size: 15px;
+}
+
+.sidebar-hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.plays-save-row {
+  display: flex;
+  gap: 6px;
+}
+
+.sidebar input,
+.sidebar select {
   background: #1e2740;
   color: var(--text);
   border: 2px solid transparent;
@@ -165,15 +206,29 @@ body {
   font-family: inherit;
 }
 
-.plays-panel input {
-  width: 160px;
+.sidebar .plays-save-row input {
+  flex: 1;
+  min-width: 0;
 }
 
-.plays-panel select {
-  max-width: 200px;
+.sidebar select {
+  width: 100%;
 }
 
-.plays-panel button {
+.sidebar select option {
+  padding: 4px 2px;
+}
+
+.plays-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.plays-actions button {
+  flex: 1;
+}
+
+.sidebar button {
   border: none;
   border-radius: 8px;
   padding: 6px 14px;
@@ -182,17 +237,17 @@ body {
   cursor: pointer;
 }
 
-.plays-panel button:not(.secondary) {
+.sidebar button:not(.secondary) {
   background: #3b82f6;
   color: #fff;
 }
 
-.plays-panel button.secondary {
+.sidebar button.secondary {
   background: #1e2740;
   color: var(--muted);
 }
 
-.plays-panel button:disabled {
+.sidebar button:disabled {
   opacity: 0.4;
   cursor: not-allowed;
 }

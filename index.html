@@ -11,43 +11,53 @@
     <h1>Play Drawing</h1>
   </header>
 
-  <div class="tray" id="tray">
-    <div class="tray-chip" data-type="offense" tabindex="0" aria-label="Drag onto the court to add an offense player">
-      <span class="tray-chip-icon tray-chip-offense">+</span>
-      <span class="tray-chip-count"></span>
-    </div>
-    <div class="tray-chip" data-type="defense" tabindex="0" aria-label="Drag onto the court to add a defender">
-      <span class="tray-chip-icon tray-chip-defense">×</span>
-      <span class="tray-chip-count"></span>
-    </div>
-    <div class="tray-chip" data-type="ball" tabindex="0" aria-label="Drag onto the court to add the ball">
-      <span class="tray-chip-icon tray-chip-ball"></span>
-      <span class="tray-chip-count"></span>
-    </div>
-    <button id="clearCourt" class="secondary">Clear</button>
-  </div>
+  <div class="app-layout">
+    <div class="main-panel">
+      <div class="tray" id="tray">
+        <div class="tray-chip" data-type="offense" tabindex="0" aria-label="Drag onto the court to add an offense player">
+          <span class="tray-chip-icon tray-chip-offense">+</span>
+          <span class="tray-chip-count"></span>
+        </div>
+        <div class="tray-chip" data-type="defense" tabindex="0" aria-label="Drag onto the court to add a defender">
+          <span class="tray-chip-icon tray-chip-defense">×</span>
+          <span class="tray-chip-count"></span>
+        </div>
+        <div class="tray-chip" data-type="ball" tabindex="0" aria-label="Drag onto the court to add the ball">
+          <span class="tray-chip-icon tray-chip-ball"></span>
+          <span class="tray-chip-count"></span>
+        </div>
+        <button id="clearCourt" class="secondary">Clear</button>
+      </div>
 
-  <div class="tool-palette" id="toolPalette">
-    <button class="tool-btn" data-tool="cut">Cut</button>
-    <button class="tool-btn" data-tool="pass">Pass</button>
-    <button class="tool-btn" data-tool="screen">Screen</button>
-    <button class="tool-btn" data-tool="dribble">Dribble</button>
-  </div>
+      <div class="tool-palette" id="toolPalette">
+        <button class="tool-btn" data-tool="cut">Cut</button>
+        <button class="tool-btn" data-tool="pass">Pass</button>
+        <button class="tool-btn" data-tool="screen">Screen</button>
+        <button class="tool-btn" data-tool="dribble">Dribble</button>
+      </div>
 
-  <div class="plays-panel" id="playsPanel">
-    <input id="playNameInput" type="text" placeholder="Play name" maxlength="60" aria-label="Play name" />
-    <button id="savePlayBtn">Save play</button>
-    <select id="savedPlaysSelect" aria-label="Saved plays">
-      <option value="" disabled selected>No saved plays</option>
-    </select>
-    <button id="loadPlayBtn" class="secondary" disabled>Load</button>
-    <button id="deletePlayBtn" class="secondary" disabled>Delete</button>
-  </div>
+      <main class="court-wrap">
+        <canvas id="courtCanvas" aria-label="Basketball half-court"></canvas>
+      </main>
+      <p class="hint">Drag a token from the tray onto the court to place it. Drag a token off the court (or double-click it) to remove it. Select a line tool, then drag from a token to draw a cut/pass/screen/dribble — click the tool again for move mode. Click a line to select it, then drag its curve handle to bend it, or drag its endpoint to move it, detach it from a token, or attach it to a different token. Double-click a line to remove it.</p>
+    </div>
 
-  <main class="court-wrap">
-    <canvas id="courtCanvas" aria-label="Basketball half-court"></canvas>
-  </main>
-  <p class="hint">Drag a token from the tray onto the court to place it. Drag a token off the court (or double-click it) to remove it. Select a line tool, then drag from a token to draw a cut/pass/screen/dribble — click the tool again for move mode. Click a line to select it, then drag its curve handle to bend it, or drag its endpoint to move it, detach it from a token, or attach it to a different token. Double-click a line to remove it. Name a play and click Save to store it, then pick it from the list to Load or Delete it later.</p>
+    <aside class="sidebar" id="playsSidebar">
+      <h2 class="sidebar-title">Plays</h2>
+      <p class="sidebar-hint">Name a play and save it, then pick a saved one to load or delete.</p>
+      <div class="plays-save-row">
+        <input id="playNameInput" type="text" placeholder="Play name" maxlength="60" aria-label="Play name" />
+        <button id="savePlayBtn">Save</button>
+      </div>
+      <select id="savedPlaysSelect" aria-label="Saved plays" size="6">
+        <option value="" disabled selected>No saved plays</option>
+      </select>
+      <div class="plays-actions">
+        <button id="loadPlayBtn" class="secondary" disabled>Load</button>
+        <button id="deletePlayBtn" class="secondary" disabled>Delete</button>
+      </div>
+    </aside>
+  </div>
 
   <script src="js/court.js"></script>
   <script src="js/tokens.js"></script>
