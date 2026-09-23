@@ -6,6 +6,11 @@ const courtCanvas = document.querySelector('#courtCanvas');
 const trayChips = [...document.querySelectorAll('.tray-chip')];
 const clearCourtBtn = document.querySelector('#clearCourt');
 const toolButtons = [...document.querySelectorAll('.tool-btn')];
+const playNameInput = document.querySelector('#playNameInput');
+const savePlayBtn = document.querySelector('#savePlayBtn');
+const savedPlaysSelect = document.querySelector('#savedPlaysSelect');
+const loadPlayBtn = document.querySelector('#loadPlayBtn');
+const deletePlayBtn = document.querySelector('#deletePlayBtn');
 
 let tokens = [];
 let lines = [];
@@ -98,16 +103,93 @@ trayChips.forEach(chip => {
   chip.addEventListener('pointercancel', endSpawnDrag);
 });
 
-clearCourtBtn.addEventListener('click', () => {
-  tokens = [];
-  lines = [];
+// Cancels any in-progress drag/selection state — used both by Clear (which
+// also wipes tokens/lines) and by Load (which replaces them wholesale), so
+// neither leaves a stale drag/handle referencing tokens or lines that no
+// longer exist.
+function resetInteractionState() {
   dragState = null;
+  spawnDrag = null;
   lineDrag = null;
   selectedLineId = null;
   curveDrag = null;
   endpointDrag = null;
+}
+
+clearCourtBtn.addEventListener('click', () => {
+  tokens = [];
+  lines = [];
+  resetInteractionState();
   redraw();
 });
+
+// --- Plays: save/load/delete named court snapshots (Checkpoint 4) -------
+
+let savedPlays = loadSavedPlays();
+
+function refreshPlaysSelect(selectedId) {
+  const previousValue = selectedId !== undefined ? selectedId : savedPlaysSelect.value;
+  savedPlaysSelect.innerHTML = '';
+  if (savedPlays.length === 0) {
+    const option = document.createElement('option');
+    option.value = '';
+    option.textContent = 'No saved plays';
+    option.disabled = true;
+    option.selected = true;
+    savedPlaysSelect.appendChild(option);
+  } else {
+    [...savedPlays]
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .forEach(play => {
+        const option = document.createElement('option');
+        option.value = play.id;
+        option.textContent = play.name;
+        savedPlaysSelect.appendChild(option);
+      });
+    if (previousValue && savedPlays.some(p => p.id === previousValue)) {
+      savedPlaysSelect.value = previousValue;
+    }
+  }
+  const hasSelection = savedPlaysSelect.value !== '';
+  loadPlayBtn.disabled = !hasSelection;
+  deletePlayBtn.disabled = !hasSelection;
+}
+
+savedPlaysSelect.addEventListener('change', () => {
+  const hasSelection = savedPlaysSelect.value !== '';
+  loadPlayBtn.disabled = !hasSelection;
+  deletePlayBtn.disabled = !hasSelection;
+});
+
+savePlayBtn.addEventListener('click', () => {
+  const name = playNameInput.value.trim();
+  if (!name) return;
+  savedPlays = saveNamedPlay(savedPlays, name, tokens, lines);
+  persistSavedPlays(savedPlays);
+  const saved = savedPlays.find(p => p.name === name);
+  refreshPlaysSelect(saved ? saved.id : undefined);
+});
+
+loadPlayBtn.addEventListener('click', () => {
+  const play = savedPlays.find(p => p.id === savedPlaysSelect.value);
+  if (!play) return;
+  const snapshot = loadPlaySnapshot(play);
+  tokens = snapshot.tokens;
+  lines = snapshot.lines;
+  resetInteractionState();
+  playNameInput.value = play.name;
+  redraw();
+});
+
+deletePlayBtn.addEventListener('click', () => {
+  const id = savedPlaysSelect.value;
+  if (!id) return;
+  savedPlays = deleteNamedPlay(savedPlays, id);
+  persistSavedPlays(savedPlays);
+  refreshPlaysSelect();
+});
+
+refreshPlaysSelect();
 
 // --- Tool palette: pick a line type to draw, or click the active tool
 // again to return to plain move mode. ------------------------------------

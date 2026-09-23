@@ -145,6 +145,58 @@ body {
   background: #24325a;
 }
 
+.plays-panel {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: center;
+  flex-wrap: wrap;
+  padding: 12px 24px 0;
+}
+
+.plays-panel input,
+.plays-panel select {
+  background: #1e2740;
+  color: var(--text);
+  border: 2px solid transparent;
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 13px;
+  font-family: inherit;
+}
+
+.plays-panel input {
+  width: 160px;
+}
+
+.plays-panel select {
+  max-width: 200px;
+}
+
+.plays-panel button {
+  border: none;
+  border-radius: 8px;
+  padding: 6px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.plays-panel button:not(.secondary) {
+  background: #3b82f6;
+  color: #fff;
+}
+
+.plays-panel button.secondary {
+  background: #1e2740;
+  color: var(--muted);
+}
+
+.plays-panel button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 .hint {
   text-align: center;
   color: var(--muted);

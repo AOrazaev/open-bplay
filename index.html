@@ -34,14 +34,25 @@
     <button class="tool-btn" data-tool="dribble">Dribble</button>
   </div>
 
+  <div class="plays-panel" id="playsPanel">
+    <input id="playNameInput" type="text" placeholder="Play name" maxlength="60" aria-label="Play name" />
+    <button id="savePlayBtn">Save play</button>
+    <select id="savedPlaysSelect" aria-label="Saved plays">
+      <option value="" disabled selected>No saved plays</option>
+    </select>
+    <button id="loadPlayBtn" class="secondary" disabled>Load</button>
+    <button id="deletePlayBtn" class="secondary" disabled>Delete</button>
+  </div>
+
   <main class="court-wrap">
     <canvas id="courtCanvas" aria-label="Basketball half-court"></canvas>
   </main>
-  <p class="hint">Drag a token from the tray onto the court to place it. Drag a token off the court (or double-click it) to remove it. Select a line tool, then drag from a token to draw a cut/pass/screen/dribble — click the tool again for move mode. Click a line to select it, then drag its curve handle to bend it, or drag its endpoint to move it, detach it from a token, or attach it to a different token. Double-click a line to remove it.</p>
+  <p class="hint">Drag a token from the tray onto the court to place it. Drag a token off the court (or double-click it) to remove it. Select a line tool, then drag from a token to draw a cut/pass/screen/dribble — click the tool again for move mode. Click a line to select it, then drag its curve handle to bend it, or drag its endpoint to move it, detach it from a token, or attach it to a different token. Double-click a line to remove it. Name a play and click Save to store it, then pick it from the list to Load or Delete it later.</p>
 
   <script src="js/court.js"></script>
   <script src="js/tokens.js"></script>
   <script src="js/lines.js"></script>
+  <script src="js/plays.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>
