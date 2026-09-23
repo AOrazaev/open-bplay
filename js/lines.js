@@ -308,10 +308,12 @@ function drawLines(ctx, lines, tokens, map) {
   lines.forEach(line => drawLine(ctx, line, tokens, map));
 }
 
-// Draws the selected-line handles: a curve handle at the control point and,
-// when the line's end isn't attached to a token, an endpoint handle so it
-// can be dragged independently. Every line type (including dribble) shows
-// a curve handle now — see linePathPoints/squiggleAlongBase.
+// Draws the selected-line handles: a curve handle at the control point, and
+// an endpoint handle at the line's current end — draggable in both
+// directions: dragging a free end moves it, and dragging an attached end
+// detaches it from its token (re-attaching if dropped on another token).
+// Every line type (including dribble) shows a curve handle now — see
+// linePathPoints/squiggleAlongBase.
 function drawLineHandles(ctx, line, tokens, map) {
   const pts = resolveLineEndpoints(line, tokens);
   if (!pts) return;
@@ -331,12 +333,19 @@ function drawLineHandles(ctx, line, tokens, map) {
     ctx.stroke();
   }
 
-  if (!line.endTokenId) {
+  {
     const endPx = map.toPx(pts.end.x, pts.end.y);
     ctx.beginPath();
     ctx.arc(endPx.x, endPx.y, handleRadiusPx, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
+    if (line.endTokenId) {
+      // Attached: draw as an outline ring around the token instead of a
+      // filled dot, so the token underneath stays visible while still
+      // showing (and hit-testing) a draggable detach handle.
+      ctx.stroke();
+    } else {
+      ctx.fill();
+      ctx.stroke();
+    }
   }
 
   ctx.restore();

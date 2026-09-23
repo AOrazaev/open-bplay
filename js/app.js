@@ -144,13 +144,17 @@ courtCanvas.addEventListener('pointerdown', (e) => {
         courtCanvas.setPointerCapture(e.pointerId);
         return;
       }
-      if (!selectedLine.endTokenId) {
-        const pts = resolveLineEndpoints(selectedLine, tokens);
-        if (pts && Math.hypot(x - pts.end.x, y - pts.end.y) <= LINE_HANDLE_HIT_RADIUS_FT) {
-          endpointDrag = { lineId: selectedLine.id, pointerId: e.pointerId };
-          courtCanvas.setPointerCapture(e.pointerId);
-          return;
-        }
+      const pts = resolveLineEndpoints(selectedLine, tokens);
+      if (pts && Math.hypot(x - pts.end.x, y - pts.end.y) <= LINE_HANDLE_HIT_RADIUS_FT) {
+        // Detach immediately, even if the end was attached to a token —
+        // this is what lets the user pull an attached arrow end free.
+        // If dropped back onto another token it re-attaches (see
+        // endDrag); otherwise it's left as a free point.
+        selectedLine.endTokenId = null;
+        selectedLine.endPoint = pts.end;
+        endpointDrag = { lineId: selectedLine.id, pointerId: e.pointerId };
+        courtCanvas.setPointerCapture(e.pointerId);
+        return;
       }
     }
   }
@@ -221,7 +225,15 @@ function endDrag(e) {
   }
   if (endpointDrag && endpointDrag.pointerId === e.pointerId) {
     if (courtCanvas.hasPointerCapture(e.pointerId)) courtCanvas.releasePointerCapture(e.pointerId);
+    const line = lines.find(l => l.id === endpointDrag.lineId);
     endpointDrag = null;
+    if (line && line.endPoint) {
+      const target = findTokenAt(tokens.filter(t => t.id !== line.originTokenId), line.endPoint.x, line.endPoint.y);
+      if (target) {
+        line.endTokenId = target.id;
+        line.endPoint = null;
+      }
+    }
     redraw();
     return;
   }

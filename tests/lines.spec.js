@@ -303,30 +303,65 @@ test.describe('Checkpoint 3.1 — select, curve, and move drawn lines', () => {
     expect(endPoint.y).toBeCloseTo(10, 0);
   });
 
-  test('a token-to-token line has no free-endpoint handle to drag', async ({ page }) => {
+  test('dragging an attached line\'s endpoint away detaches it from its token', async ({ page }) => {
     await page.goto('/');
     await spawnTokenAt(page, 'offense', 10, 30);
     await spawnTokenAt(page, 'offense', 30, 30);
     await page.locator('.tool-btn[data-tool="cut"]').click();
     await dragFromTokenTo(page, 0, 30, 30);
     await expect.poll(() => page.evaluate(() => lines.length)).toBe(1);
+    expect(await page.evaluate(() => lines[0].endTokenId)).not.toBeNull();
 
     const midPoint = await toClientPoint(page, 20, 30);
     await page.mouse.click(midPoint.x, midPoint.y);
     await expect.poll(() => page.evaluate(() => selectedLineId)).not.toBeNull();
 
-    // Dragging near the attached token's own position should move the
-    // token itself (existing behavior), not an endpoint handle.
+    // Drag from the attached end's handle (at the second token's position)
+    // out to empty court space — this should detach the line from that
+    // token and leave it as a free point there.
     const endToken = await toClientPoint(page, 30, 30);
-    const target = await toClientPoint(page, 25, 25);
+    const target = await toClientPoint(page, 20, 15);
     await page.mouse.move(endToken.x, endToken.y);
     await page.mouse.down();
     await page.mouse.move(target.x, target.y, { steps: 5 });
     await page.mouse.up();
 
+    const line = await page.evaluate(() => ({ endTokenId: lines[0].endTokenId, endPoint: lines[0].endPoint }));
+    expect(line.endTokenId).toBeNull();
+    expect(line.endPoint.x).toBeCloseTo(20, 0);
+    expect(line.endPoint.y).toBeCloseTo(15, 0);
+
+    // The second token itself must not have moved — only the line's end
+    // detached from it.
     const secondTokenPos = await page.evaluate(() => ({ x: tokens[1].x, y: tokens[1].y }));
-    expect(secondTokenPos.x).toBeCloseTo(25, 0);
-    expect(secondTokenPos.y).toBeCloseTo(25, 0);
+    expect(secondTokenPos.x).toBeCloseTo(30, 0);
+    expect(secondTokenPos.y).toBeCloseTo(30, 0);
+  });
+
+  test('dragging a free endpoint onto another token attaches it', async ({ page }) => {
+    await page.goto('/');
+    await spawnTokenAt(page, 'offense', 10, 30);
+    await spawnTokenAt(page, 'offense', 30, 15);
+    await page.locator('.tool-btn[data-tool="pass"]').click();
+    await dragFromTokenTo(page, 0, 30, 20); // free-point end, not on the second token
+    await expect.poll(() => page.evaluate(() => lines.length)).toBe(1);
+    expect(await page.evaluate(() => lines[0].endTokenId)).toBeNull();
+
+    const midPoint = await toClientPoint(page, 20, 25);
+    await page.mouse.click(midPoint.x, midPoint.y);
+    await expect.poll(() => page.evaluate(() => selectedLineId)).not.toBeNull();
+
+    const endpointStart = await toClientPoint(page, 30, 20);
+    const secondTokenPoint = await toClientPoint(page, 30, 15);
+    await page.mouse.move(endpointStart.x, endpointStart.y);
+    await page.mouse.down();
+    await page.mouse.move(secondTokenPoint.x, secondTokenPoint.y, { steps: 5 });
+    await page.mouse.up();
+
+    const line = await page.evaluate(() => ({ endTokenId: lines[0].endTokenId, endPoint: lines[0].endPoint }));
+    const secondTokenId = await page.evaluate(() => tokens[1].id);
+    expect(line.endTokenId).toBe(secondTokenId);
+    expect(line.endPoint).toBeNull();
   });
 
   test('a dribble line can be selected and curved just like other line types', async ({ page }) => {
