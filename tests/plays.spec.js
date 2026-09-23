@@ -160,11 +160,10 @@ test.describe('Checkpoint 4 — save/load plays in a nested folder hierarchy', (
   test('double-clicking a name renames it in place', async ({ page }) => {
     await page.goto('/');
     await createFolder(page, 'Sets');
-    // Dispatched directly (rather than a real two-click gesture) because
-    // the single-click "select folder" handler re-renders the tree on
-    // every click, including the first click of the pair — that DOM swap
-    // makes a real hardware-style double-click racy in a headless browser.
-    await folderRow(page, 'Sets').locator('.folder-name').dispatchEvent('dblclick');
+    // A real two-click gesture: the click handler detects the second
+    // click via `event.detail` before the first click's re-render can
+    // detach the node a naive `dblclick` listener would have raced with.
+    await folderRow(page, 'Sets').locator('.folder-name').dblclick();
     const input = page.locator('.rename-input');
     await input.fill('Play Sets');
     await input.press('Enter');
@@ -172,6 +171,23 @@ test.describe('Checkpoint 4 — save/load plays in a nested folder hierarchy', (
     await expect(folderRow(page, 'Play Sets')).toBeVisible();
     const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('play-drawing-saved-plays-v1')));
     expect(saved[0].name).toBe('Play Sets');
+  });
+
+  test('double-clicking a play name (not just a folder) also renames it in place', async ({ page }) => {
+    await page.goto('/');
+    await spawnTokenAt(page, 'offense', 10, 30);
+    await savePlay(page, 'Iso');
+
+    await playRow(page, 'Iso').locator('.play-name').dblclick();
+    const input = page.locator('.rename-input');
+    await input.fill('Iso Left');
+    await input.press('Enter');
+
+    await expect(playRow(page, 'Iso Left')).toBeVisible();
+    // Double-clicking to rename must not also trigger the single-click
+    // "load this play" action and clobber the court.
+    const tokenCount = await page.evaluate(() => tokens.length);
+    expect(tokenCount).toBe(1);
   });
 
   test('saving again under the same name in the same folder overwrites instead of duplicating', async ({ page }) => {

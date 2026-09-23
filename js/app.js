@@ -216,14 +216,22 @@ function renderPlaysTreeChildren(container, parentId, depth) {
       nameEl.className = 'folder-name';
       nameEl.textContent = entry.name;
       nameEl.title = 'Select as save location';
-      nameEl.addEventListener('click', () => {
+      // Double-click is detected via the click event's own `detail` count
+      // (2 on the second click) rather than a separate `dblclick`
+      // listener: the first click's handler re-renders the tree (to show
+      // the new "current" selection), which detaches this exact button
+      // from the document. A `dblclick` fired afterwards would then be
+      // racing against — and targeting — an already-removed node, so the
+      // rename input silently never appears. Branching on `detail` lets
+      // us catch the second click *before* triggering that re-render.
+      nameEl.addEventListener('click', (e) => {
+        if (e.detail >= 2) {
+          startRename(entry, nameEl);
+          return;
+        }
         currentFolderId = entry.id;
         expandedFolderIds.add(entry.id);
         renderPlaysTree();
-      });
-      nameEl.addEventListener('dblclick', (e) => {
-        e.stopPropagation();
-        startRename(entry, nameEl);
       });
 
       const addSubfolderBtn = createTreeButton('add-subfolder-btn', '+', `New folder inside ${entry.name}`, () => {
@@ -249,10 +257,16 @@ function renderPlaysTreeChildren(container, parentId, depth) {
       nameEl.className = 'play-name';
       nameEl.textContent = entry.name;
       nameEl.title = 'Load this play';
-      nameEl.addEventListener('click', () => loadPlayEntry(entry));
-      nameEl.addEventListener('dblclick', (e) => {
-        e.stopPropagation();
-        startRename(entry, nameEl);
+      // See the folder-name click handler above for why double-click is
+      // detected via `e.detail` here rather than a separate `dblclick`
+      // listener — loading a play also re-renders the tree, which would
+      // otherwise detach this button before a real `dblclick` could fire.
+      nameEl.addEventListener('click', (e) => {
+        if (e.detail >= 2) {
+          startRename(entry, nameEl);
+          return;
+        }
+        loadPlayEntry(entry);
       });
       const deleteBtn = createTreeButton('delete-btn', '×', `Delete ${entry.name}`, () => deleteEntryAndReconcile(entry));
 
