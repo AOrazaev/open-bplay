@@ -97,16 +97,39 @@ function reflectAcross(pivotFt, pointFt) {
   return { x: 2 * pivotFt.x - pointFt.x, y: 2 * pivotFt.y - pointFt.y };
 }
 
+function lerpPt(a, b, frac) {
+  return { x: a.x + (b.x - a.x) * frac, y: a.y + (b.y - a.y) * frac };
+}
+
 // Catmull-Rom position at parameter t (0..1) between p1 and p2, using p0
 // and p3 as the neighboring points that shape the tangents. p(0) = p1 and
 // p(1) = p2 exactly.
+//
+// Uses *centripetal* parametrization (knot spacing scaled by
+// distance^0.5) rather than the simpler uniform formula. Our curve
+// handle can sit very close to one endpoint (large alongFt), making the
+// two chord segments wildly unequal in length — uniform Catmull-Rom
+// loops/cusps badly in exactly that case (visible as a "hook" near the
+// short segment, with a wildly wrong tangent for the arrowhead).
+// Centripetal parametrization is the standard fix: it stays loop-free
+// for any point spacing. See https://en.wikipedia.org/wiki/Centripetal_Catmull%E2%80%93Rom_spline
 function catmullRomPoint(p0, p1, p2, p3, t) {
-  const t2 = t * t;
-  const t3 = t2 * t;
-  return {
-    x: 0.5 * ((2 * p1.x) + (-p0.x + p2.x) * t + (2 * p0.x - 5 * p1.x + 4 * p2.x - p3.x) * t2 + (-p0.x + 3 * p1.x - 3 * p2.x + p3.x) * t3),
-    y: 0.5 * ((2 * p1.y) + (-p0.y + p2.y) * t + (2 * p0.y - 5 * p1.y + 4 * p2.y - p3.y) * t2 + (-p0.y + 3 * p1.y - 3 * p2.y + p3.y) * t3),
-  };
+  const alpha = 0.5;
+  const d01 = Math.max(Math.hypot(p1.x - p0.x, p1.y - p0.y), 1e-6);
+  const d12 = Math.max(Math.hypot(p2.x - p1.x, p2.y - p1.y), 1e-6);
+  const d23 = Math.max(Math.hypot(p3.x - p2.x, p3.y - p2.y), 1e-6);
+  const t0 = 0;
+  const t1 = t0 + d01 ** alpha;
+  const t2 = t1 + d12 ** alpha;
+  const t3 = t2 + d23 ** alpha;
+  const tt = t1 + t * (t2 - t1);
+
+  const a1 = lerpPt(p0, p1, (tt - t0) / (t1 - t0));
+  const a2 = lerpPt(p1, p2, (tt - t1) / (t2 - t1));
+  const a3 = lerpPt(p2, p3, (tt - t2) / (t3 - t2));
+  const b1 = lerpPt(a1, a2, (tt - t0) / (t2 - t0));
+  const b2 = lerpPt(a2, a3, (tt - t1) / (t3 - t1));
+  return lerpPt(b1, b2, (tt - t1) / (t2 - t1));
 }
 
 // Samples a Catmull-Rom spline that interpolates exactly through

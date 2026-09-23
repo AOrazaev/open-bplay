@@ -315,6 +315,36 @@ test.describe('Checkpoint 3.1 — select, curve, and move drawn lines', () => {
     expect(handlePoint.y).toBeCloseTo(32, 5);
   });
 
+  test('an extreme curve handle (near an endpoint, far off-axis) does not loop back near its tail', async ({ page }) => {
+    // Regression test for a visual bug: with the handle pulled close to
+    // the end and far to one side, uniform Catmull-Rom parametrization
+    // could loop/hook right near the endpoint, making the final path
+    // segment (and therefore the arrowhead) point in a wildly wrong
+    // direction instead of continuing roughly toward the endpoint.
+    await page.goto('/');
+    const start = { x: 5, y: 5 };
+    const end = { x: 25, y: 5 }; // chord length 20, halfLenFt = 10
+    const results = await page.evaluate(({ start, end }) => {
+      // Handle near the clamp limit toward `end` (alongFt up to 9), well
+      // off-axis (perpFt large relative to the remaining distance to end).
+      const handleFt = resolveHandlePointFt(start, end, { alongFt: 8.5, perpFt: 6 });
+      const path = catmullRomSamplePoints(start, handleFt, end, 60);
+      const tail = path[path.length - 1];
+      const beforeTail = path[path.length - 2];
+      const tailDir = { x: tail.x - beforeTail.x, y: tail.y - beforeTail.y };
+      const chordDir = { x: end.x - start.x, y: end.y - start.y };
+      const dot = tailDir.x * chordDir.x + tailDir.y * chordDir.y;
+      return { dot, tail, endPoint: end };
+    }, { start, end });
+
+    // The path must still end exactly on the endpoint...
+    expect(results.tail.x).toBeCloseTo(results.endPoint.x, 5);
+    expect(results.tail.y).toBeCloseTo(results.endPoint.y, 5);
+    // ...and its final direction of travel must still point broadly
+    // forward (toward end), not hook backward into a loop.
+    expect(results.dot).toBeGreaterThan(0);
+  });
+
   test('dragging a selected line\'s free-endpoint handle moves its endpoint', async ({ page }) => {
     await page.goto('/');
     await spawnTokenAt(page, 'offense', 10, 30);
