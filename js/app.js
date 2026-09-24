@@ -192,7 +192,20 @@ const expandedFolderIds = new Set(savedViewState.expandedFolderIds.filter(isVali
 
 function updatePlaysLocationLabel() {
   playsLocationEl.textContent = `Saving to: ${folderPath(library, currentFolderId).join(' / ')}`;
+  // Already at the root — nothing to navigate to, so don't dangle a
+  // clickable-looking no-op.
+  playsLocationEl.disabled = currentFolderId === null;
 }
+
+// The only way to select a folder as the save/create location was
+// clicking its name in the tree — with no way back to the root, the
+// first folder you selected became "stuck" as the destination for every
+// subsequent "+ Folder"/save. This label doubles as a root breadcrumb.
+playsLocationEl.addEventListener('click', () => {
+  if (currentFolderId === null) return;
+  currentFolderId = null;
+  renderPlaysTree();
+});
 
 // Creates a small text button used for the tree's inline icon actions
 // (expand/collapse, add-subfolder, delete) — kept as one helper so every

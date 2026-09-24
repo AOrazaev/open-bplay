@@ -323,6 +323,19 @@ body {
   font-size: 11px;
   line-height: 1.3;
   overflow-wrap: anywhere;
+  /* Reset button defaults so this reads like the plain label it used to
+     be, aside from the pointer cursor hinting it's clickable. */
+  background: none;
+  border: none;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+}
+
+.plays-location:hover,
+.plays-location:focus-visible {
+  color: var(--text);
+  text-decoration: underline;
 }
 
 .plays-tree {

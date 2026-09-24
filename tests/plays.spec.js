@@ -82,6 +82,24 @@ test.describe('Checkpoint 4 — save/load plays in a nested folder hierarchy', (
     await expect(page.locator('#playsLocation')).toHaveText('Saving to: Root / Sets');
   });
 
+  test('clicking the "Saving to" label returns the save location to the root, so a second top-level folder can be created', async ({ page }) => {
+    await page.goto('/');
+    await createFolder(page, 'Sets');
+    await expect(folderRow(page, 'Sets')).toHaveClass(/current/);
+    await expect(page.locator('#playsLocation')).toBeEnabled();
+
+    await page.locator('#playsLocation').click();
+    await expect(page.locator('#playsLocation')).toHaveText('Saving to: Root');
+    await expect(page.locator('#playsLocation')).toBeDisabled();
+    await expect(folderRow(page, 'Sets')).not.toHaveClass(/current/);
+
+    // With the location back at root, a second "+ Folder" creates a
+    // sibling of Sets, not a child of it.
+    await createFolder(page, 'Drills');
+    const drillsParentId = await page.evaluate(() => library.find(e => e.name === 'Drills').parentId);
+    expect(drillsParentId).toBeNull();
+  });
+
   test('saving a play while a folder is selected nests it under that folder', async ({ page }) => {
     await page.goto('/');
     await createFolder(page, 'Sets');
