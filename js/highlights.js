@@ -26,13 +26,18 @@ function createHighlightStroke(points) {
 // so its own self-overlaps don't double up the translucent color —
 // separate overlapping strokes still stack, the same way a real
 // highlighter marker does. `options.preview` renders it fainter, used
-// while the user is still dragging one out.
+// while the user is still dragging one out. `options.alpha` (or the
+// stroke's own `.alpha`, set by interpolateFrameHighlights during
+// playback cross-fades) further scales opacity, e.g. to fade a stroke
+// in/out between frames.
 function drawHighlightStroke(ctx, stroke, map, options = {}) {
   if (!stroke.points || stroke.points.length < 2) return;
   const pathPx = stroke.points.map(p => map.toPx(p.x, p.y));
+  const baseAlpha = options.preview ? 0.6 : 1;
+  const fadeAlpha = options.alpha != null ? options.alpha : (stroke.alpha != null ? stroke.alpha : 1);
 
   ctx.save();
-  ctx.globalAlpha = options.preview ? 0.6 : 1;
+  ctx.globalAlpha = baseAlpha * fadeAlpha;
   ctx.strokeStyle = HIGHLIGHT_COLOR;
   ctx.lineWidth = Math.max(6, map.scale * HIGHLIGHT_WIDTH_FT);
   ctx.lineCap = 'round';

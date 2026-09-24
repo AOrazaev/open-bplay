@@ -187,7 +187,7 @@ playFramesBtn.addEventListener('click', () => {
     if (segmentStart === null) segmentStart = now;
     const elapsedMs = now - segmentStart;
     playbackTokens = interpolateFrameTokens(frames[segment].tokens, frames[segment + 1].tokens, elapsedMs, segmentDurationMs);
-    playbackHighlights = frames[segment].highlights;
+    playbackHighlights = interpolateFrameHighlights(frames[segment].highlights, frames[segment + 1].highlights, elapsedMs, segmentDurationMs);
     redraw();
 
     if (elapsedMs >= segmentDurationMs) {

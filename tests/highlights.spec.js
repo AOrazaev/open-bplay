@@ -72,6 +72,18 @@ test.describe('Freehand court highlighter', () => {
     expect(advanced).toBe(0);
   });
 
+  test('interpolateFrameHighlights cross-fades a stroke out of one frame and in for another', async ({ page }) => {
+    await page.goto('/');
+    const result = await page.evaluate(() => {
+      const departing = { id: 'a', points: [{ x: 0, y: 0 }, { x: 5, y: 5 }] };
+      const arriving = { id: 'b', points: [{ x: 10, y: 10 }, { x: 15, y: 15 }] };
+      return interpolateFrameHighlights([departing], [arriving], 500, 1000);
+    });
+    const byId = Object.fromEntries(result.map(h => [h.id, h.alpha]));
+    expect(byId.a).toBeCloseTo(0.5, 1);
+    expect(byId.b).toBeCloseTo(0.5, 1);
+  });
+
   test('a highlight remains visible while playing back the frame sequence', async ({ page }) => {
     await page.goto('/');
     await page.locator('.tool-btn[data-tool="highlight"]').click();

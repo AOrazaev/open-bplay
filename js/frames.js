@@ -171,3 +171,29 @@ function interpolateFrameTokens(fromTokens, toTokens, elapsedMs, segmentDuration
 
   return result;
 }
+
+// Cross-fades highlight strokes between two frames, mirroring
+// interpolateFrameTokens' fade-out/fade-in-by-id approach: a stroke
+// present in both frames (same id, e.g. carried over by "+ Frame") stays
+// fully visible throughout, one only in the departing frame fades out,
+// and one only in the arriving frame fades in — so a highlight never
+// just abruptly appears/disappears mid-playback.
+function interpolateFrameHighlights(fromHighlights, toHighlights, elapsedMs, segmentDurationMs) {
+  const toIds = new Set(toHighlights.map(h => h.id));
+  const fromIds = new Set(fromHighlights.map(h => h.id));
+  const segmentT = segmentDurationMs > 0 ? Math.min(1, elapsedMs / segmentDurationMs) : 1;
+  const result = [];
+
+  fromHighlights.forEach(h => {
+    const alpha = toIds.has(h.id) ? 1 : 1 - segmentT;
+    if (alpha > 0) result.push({ ...h, alpha });
+  });
+  toHighlights.forEach(h => {
+    if (!fromIds.has(h.id)) {
+      const alpha = segmentT;
+      if (alpha > 0) result.push({ ...h, alpha });
+    }
+  });
+
+  return result;
+}
