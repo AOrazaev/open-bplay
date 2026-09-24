@@ -175,14 +175,21 @@ function findCarriedBallId(tokens, playerId) {
 // Finds the token nearest to the given court-space point, within
 // hitRadiusFt, or null if none qualify. Used for pointer hit-testing.
 //
-// Picks the *nearest* token rather than just the first one found within
-// range — this matters once a ball is carried near a player (see
-// findCarriedBallId), since both are then within hit radius of a click
-// on the player, and the player being the exact click target should win.
-// Exact ties (most commonly a fully coincident ball+player, or several
-// stacked players) fall back to drawTokens' visual z-order (balls drawn
-// last/on top of players, each group in its own array order), so clicking
-// dead-center on a stack still grabs whichever one is visually on top.
+// Balls are hit-tested at their *drawn* position (ballDrawPositionFt's
+// nudged/blended spot when held), not their raw x/y — otherwise clicking
+// exactly where a carried ball visibly renders could measure closer to
+// its carrier's raw position than to the ball's own (still-nudged-away)
+// raw position, and grab the player instead of the ball the user is
+// actually pointing at.
+//
+// Nearest-wins (rather than just first-in-range) matters once a ball is
+// carried near a player (see findCarriedBallId), since both can be within
+// hit radius of a click on the player, and the player being the exact
+// click target should win. Exact ties (most commonly a fully coincident
+// ball+player, or several stacked players) fall back to drawTokens'
+// visual z-order (balls drawn last/on top of players, each group in its
+// own array order), so clicking dead-center on a stack still grabs
+// whichever one is visually on top.
 function findTokenAt(tokens, xFt, yFt, hitRadiusFt = TOKEN_RADIUS_FT * 1.3) {
   const players = tokens.filter(t => t.type !== TOKEN_TYPES.BALL);
   const balls = tokens.filter(t => t.type === TOKEN_TYPES.BALL);
@@ -190,7 +197,8 @@ function findTokenAt(tokens, xFt, yFt, hitRadiusFt = TOKEN_RADIUS_FT * 1.3) {
   let best = null;
   let bestDistFt = Infinity;
   for (const t of topmostFirst) {
-    const d = Math.hypot(t.x - xFt, t.y - yFt);
+    const pos = t.type === TOKEN_TYPES.BALL ? ballDrawPositionFt(t, players) : t;
+    const d = Math.hypot(pos.x - xFt, pos.y - yFt);
     if (d <= hitRadiusFt && d < bestDistFt) {
       best = t;
       bestDistFt = d;

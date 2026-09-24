@@ -270,18 +270,24 @@ test.describe('Checkpoint 2 — tray-driven place & drag tokens', () => {
     expect(result[result.length - 1]).toBeCloseTo(0, 5);
   });
 
-  test('hit-testing a coincident ball and player picks whichever is drawn on top (the ball)', async ({ page }) => {
-    // drawTokens always renders balls last (on top of players) regardless
-    // of array/spawn order. findTokenAt must agree with that visual order,
-    // even when the ball was added to the tokens array before the player.
+  test('a carried ball is hit-tested at its drawn (nudged) position, not its raw one', async ({ page }) => {
+    // When a ball is held, drawTokens renders it nudged away from its
+    // carrier (ballDrawPositionFt) rather than at its raw x/y — hit
+    // testing must agree with that, so a click exactly where the ball
+    // visibly is grabs the ball, and a click on the player's own (still
+    // un-nudged) dot grabs the player instead.
     await page.goto('/');
     const result = await page.evaluate(() => {
-      const ball = { id: 'b1', type: 'ball', x: 20, y: 20 };
       const player = { id: 'p1', type: 'offense', label: '1', x: 20, y: 20 };
-      const hit = findTokenAt([ball, player], 20, 20);
-      return hit && hit.id;
+      const ball = { id: 'b1', type: 'ball', x: 20, y: 20 };
+      const drawnBallPos = ballDrawPositionFt(ball, [player]);
+      return {
+        atDrawnBallSpot: findTokenAt([ball, player], drawnBallPos.x, drawnBallPos.y)?.id,
+        atPlayerSpot: findTokenAt([ball, player], player.x, player.y)?.id,
+      };
     });
-    expect(result).toBe('b1');
+    expect(result.atDrawnBallSpot).toBe('b1');
+    expect(result.atPlayerSpot).toBe('p1');
   });
 
   test('hit-testing among multiple overlapping players picks the last-drawn (topmost) one', async ({ page }) => {
