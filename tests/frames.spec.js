@@ -177,6 +177,48 @@ test.describe('Checkpoint 6 — multi-step plays (frames)', () => {
     await expect(page.locator('#frameLabel')).toHaveText('Frame 1 of 2');
   });
 
+  test('the step ▶ button animates a single transition to the next frame, then lands there', async ({ page }) => {
+    await page.goto('/');
+    await spawnTokenAt(page, 'offense', 10, 30);
+    await page.click('#addFrameBtn');
+    await page.click('#prevFrameBtn');
+    await expect(page.locator('#frameLabel')).toHaveText('Frame 1 of 2');
+
+    await page.click('#stepNextFrameBtn');
+    // Mid-animation, other frame-bar controls that would interfere are
+    // disabled (same guard as the full Play button).
+    await expect(page.locator('#addFrameBtn')).toBeDisabled();
+    await expect(page.locator('#frameLabel')).toHaveText('Frame 2 of 2', { timeout: 3000 });
+    await expect(page.locator('#addFrameBtn')).toBeEnabled();
+  });
+
+  test('the step ◀ button animates a single transition to the previous frame, then lands there', async ({ page }) => {
+    await page.goto('/');
+    await spawnTokenAt(page, 'offense', 10, 30);
+    await page.click('#addFrameBtn');
+    await expect(page.locator('#frameLabel')).toHaveText('Frame 2 of 2');
+
+    await page.click('#stepPrevFrameBtn');
+    await expect(page.locator('#frameLabel')).toHaveText('Frame 1 of 2', { timeout: 3000 });
+  });
+
+  test('the step buttons are disabled at the first/last frame and instant Prev/Next are unaffected', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.locator('#stepPrevFrameBtn')).toBeDisabled();
+    await expect(page.locator('#stepNextFrameBtn')).toBeDisabled();
+    await expect(page.locator('#prevFrameBtn')).toBeDisabled();
+    await expect(page.locator('#nextFrameBtn')).toBeDisabled();
+
+    await spawnTokenAt(page, 'offense', 10, 30);
+    await page.click('#addFrameBtn');
+    await expect(page.locator('#stepNextFrameBtn')).toBeDisabled();
+    await expect(page.locator('#stepPrevFrameBtn')).toBeEnabled();
+
+    // Instant Prev is unaffected by the step buttons existing alongside it.
+    await page.click('#prevFrameBtn');
+    await expect(page.locator('#frameLabel')).toHaveText('Frame 1 of 2');
+  });
+
   test('playback moves tokens at a constant speed, so a short move finishes before a long one', async ({ page }) => {
     await page.goto('/');
     const result = await page.evaluate(() => {

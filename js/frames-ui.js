@@ -11,6 +11,8 @@
 
 const prevFrameBtn = document.querySelector('#prevFrameBtn');
 const nextFrameBtn = document.querySelector('#nextFrameBtn');
+const stepPrevFrameBtn = document.querySelector('#stepPrevFrameBtn');
+const stepNextFrameBtn = document.querySelector('#stepNextFrameBtn');
 const addFrameBtn = document.querySelector('#addFrameBtn');
 const advanceFrameBtn = document.querySelector('#advanceFrameBtn');
 const deleteFrameBtn = document.querySelector('#deleteFrameBtn');
@@ -104,6 +106,8 @@ function updateFrameBar() {
   frameLabelEl.textContent = `Frame ${currentFrameIndex + 1} of ${frames.length}`;
   prevFrameBtn.disabled = isPlaying() || currentFrameIndex === 0;
   nextFrameBtn.disabled = isPlaying() || currentFrameIndex === frames.length - 1;
+  stepPrevFrameBtn.disabled = isPlaying() || currentFrameIndex === 0;
+  stepNextFrameBtn.disabled = isPlaying() || currentFrameIndex === frames.length - 1;
   deleteFrameBtn.disabled = isPlaying() || frames.length <= 1;
   addFrameBtn.disabled = isPlaying();
   // Only meaningful once at least one arrow has been drawn on this frame.
@@ -201,10 +205,13 @@ deleteFrameBtn.addEventListener('click', () => {
   deleteFrameAt(currentFrameIndex);
 });
 
-// Stops any running playback animation. `restoreIndex` decides where the
-// frame bar lands: manually pressing Stop mid-playback returns to the
-// frame Play was pressed from (a preview should leave you where you were),
-// while playback finishing on its own leaves you on the last frame instead.
+// Stops any running playback animation (whether a full Play run or a
+// single-step ‹◀›/‹▶› transition). `restoreIndex` decides where the frame
+// bar lands: manually pressing Stop mid-Play returns to the frame Play
+// was pressed from (a preview should leave you where you were), while
+// playback finishing on its own — either the full sequence or a single
+// step — lands on whichever frame it was headed to (passed explicitly by
+// animateThroughFrames when a segment run completes).
 function stopPlayback(restoreIndex = playbackStartIndex) {
   if (playbackHandle !== null) cancelAnimationFrame(playbackHandle);
   playbackHandle = null;
@@ -214,43 +221,69 @@ function stopPlayback(restoreIndex = playbackStartIndex) {
   goToFrame(restoreIndex);
 }
 
+// Animates through `indices` (an ordered list of frame indices, each
+// adjacent pair becoming one transition segment) — the shared engine
+// behind both the full-sequence Play button (indices = every frame, in
+// order) and the single-step ‹◀›/‹▶› buttons (indices = just [current,
+// neighbor]). `manualStopRestoreIndex` is only used if playback is
+// interrupted mid-run by pressing Stop (only reachable from the full Play
+// button, since the step buttons don't expose a Stop control) — for a
+// full Play run that's back where it started; a completed run (whether
+// it plays out naturally or is stopped after finishing) always lands on
+// `indices`' last frame.
+function animateThroughFrames(indices, manualStopRestoreIndex) {
+  if (indices.length < 2) return;
+  syncCurrentFrame();
+  playbackStartIndex = manualStopRestoreIndex;
+  playbackHandle = -1; // truthy placeholder so isPlaying() is true before the first rAF fires
+  updateFrameBar();
+
+  let segment = 0; // position within `indices` of the transition currently animating
+  let segmentStart = null; // performance.now() timestamp the current segment began
+  let segmentDurationMs = frameTransitionDurationMs(frames[indices[0]], frames[indices[1]]);
+
+  function tick(now) {
+    if (segmentStart === null) segmentStart = now;
+    const elapsedMs = now - segmentStart;
+    const fromFrame = frames[indices[segment]];
+    const toFrame = frames[indices[segment + 1]];
+    playbackTokens = interpolateFrameTokens(fromFrame.tokens, toFrame.tokens, elapsedMs, segmentDurationMs);
+    playbackHighlights = interpolateFrameHighlights(fromFrame.highlights, toFrame.highlights, elapsedMs, segmentDurationMs);
+    redraw();
+
+    if (elapsedMs >= segmentDurationMs) {
+      segment++;
+      if (segment >= indices.length - 1) {
+        stopPlayback(indices[indices.length - 1]);
+        return;
+      }
+      segmentStart = now;
+      segmentDurationMs = frameTransitionDurationMs(frames[indices[segment]], frames[indices[segment + 1]]);
+    }
+    playbackHandle = requestAnimationFrame(tick);
+  }
+
+  playbackHandle = requestAnimationFrame(tick);
+}
+
 playFramesBtn.addEventListener('click', () => {
   if (isPlaying()) {
     stopPlayback();
     return;
   }
   if (frames.length <= 1) return;
-
-  syncCurrentFrame();
-  playbackStartIndex = currentFrameIndex;
   playFramesBtn.textContent = '■ Stop';
-  playbackHandle = -1; // truthy placeholder so isPlaying() is true before the first rAF fires
-  updateFrameBar();
+  animateThroughFrames(frames.map((_, i) => i), currentFrameIndex);
+});
 
-  let segment = 0; // index of the frames[segment] -> frames[segment+1] transition
-  let segmentStart = null; // performance.now() timestamp the current segment began
-  let segmentDurationMs = frameTransitionDurationMs(frames[0], frames[1]);
+stepPrevFrameBtn.addEventListener('click', () => {
+  if (isPlaying() || currentFrameIndex === 0) return;
+  animateThroughFrames([currentFrameIndex, currentFrameIndex - 1], currentFrameIndex - 1);
+});
 
-  function tick(now) {
-    if (segmentStart === null) segmentStart = now;
-    const elapsedMs = now - segmentStart;
-    playbackTokens = interpolateFrameTokens(frames[segment].tokens, frames[segment + 1].tokens, elapsedMs, segmentDurationMs);
-    playbackHighlights = interpolateFrameHighlights(frames[segment].highlights, frames[segment + 1].highlights, elapsedMs, segmentDurationMs);
-    redraw();
-
-    if (elapsedMs >= segmentDurationMs) {
-      segment++;
-      if (segment >= frames.length - 1) {
-        stopPlayback(frames.length - 1);
-        return;
-      }
-      segmentStart = now;
-      segmentDurationMs = frameTransitionDurationMs(frames[segment], frames[segment + 1]);
-    }
-    playbackHandle = requestAnimationFrame(tick);
-  }
-
-  playbackHandle = requestAnimationFrame(tick);
+stepNextFrameBtn.addEventListener('click', () => {
+  if (isPlaying() || currentFrameIndex === frames.length - 1) return;
+  animateThroughFrames([currentFrameIndex, currentFrameIndex + 1], currentFrameIndex + 1);
 });
 
 updateFrameBar();
