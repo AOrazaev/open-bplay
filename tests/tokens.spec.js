@@ -50,6 +50,25 @@ test.describe('Checkpoint 2 — tray-driven place & drag tokens', () => {
     expect(labels).toEqual(['1', '2', '3', '4', '5']);
   });
 
+  test('removing a middle-numbered offense token and spawning a new one reuses the freed number, not a duplicate', async ({ page }) => {
+    await page.goto('/');
+    for (let i = 0; i < 5; i++) await spawnTokenAt(page, 'offense', 5 + i * 8, 30);
+
+    // Remove #3 (third spawned).
+    const point3 = await page.evaluate(() => {
+      const canvas = document.querySelector('#courtCanvas');
+      const p3 = tokens.find(t => t.type === TOKEN_TYPES.OFFENSE && t.label === '3');
+      return courtFeetToClientPoint(canvas, p3.x, p3.y);
+    });
+    await page.mouse.dblclick(point3.x, point3.y);
+    await expect.poll(() => page.evaluate(() => tokens.filter(t => t.type === TOKEN_TYPES.OFFENSE).length)).toBe(4);
+
+    // Spawning a new one should get the freed "3", not a second "5".
+    await spawnTokenAt(page, 'offense', 25, 10);
+    const labels = await page.evaluate(() => tokens.filter(t => t.type === TOKEN_TYPES.OFFENSE).map(t => t.label).sort());
+    expect(labels).toEqual(['1', '2', '3', '4', '5']);
+  });
+
   test('dropping a tray chip outside the court does not spawn a token', async ({ page }) => {
     await page.goto('/');
     const chipBox = await page.locator('.tray-chip[data-type="offense"]').boundingBox();

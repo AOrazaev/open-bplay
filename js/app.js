@@ -111,6 +111,18 @@ function maxFor(type) {
   return 1; // ball
 }
 
+// Smallest jersey number (as a string) not currently in use among offense
+// tokens — using count+1 instead would collide once a middle-numbered
+// token (e.g. #3 of 5) was removed and a new one spawned, since the
+// remaining count no longer matches the highest label in use.
+function nextOffenseLabel() {
+  const used = new Set(tokens.filter(t => t.type === TOKEN_TYPES.OFFENSE).map(t => t.label));
+  for (let i = 1; i <= MAX_OFFENSE_TOKENS; i++) {
+    if (!used.has(String(i))) return String(i);
+  }
+  return String(MAX_OFFENSE_TOKENS + 1); // unreachable while spawning is capped at MAX_OFFENSE_TOKENS
+}
+
 function updateTrayState() {
   trayChips.forEach(chip => {
     const type = chip.dataset.type;
@@ -129,7 +141,7 @@ trayChips.forEach(chip => {
 
   chip.addEventListener('pointerdown', (e) => {
     if (countOf(type) >= maxFor(type)) return;
-    const label = type === TOKEN_TYPES.OFFENSE ? String(countOf(type) + 1) : '';
+    const label = type === TOKEN_TYPES.OFFENSE ? nextOffenseLabel() : '';
     spawnDrag = { type, label, pointerId: e.pointerId, preview: null };
     chip.setPointerCapture(e.pointerId);
     redraw();
