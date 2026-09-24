@@ -283,27 +283,34 @@ body {
    action buttons (currently just Export Image). Only one panel is shown
    at a time; each keeps its own scroll/content untouched while hidden,
    same rationale as the sidebar's own collapse (width: 0 rather than
-   unmounting) for the tree state. */
+   unmounting) for the tree state. Styled as flat underline tabs (not
+   pill buttons) so they read as a view switcher, not another action. */
 .sidebar-tabs {
   display: flex;
-  gap: 4px;
+  gap: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .sidebar-tab {
-  flex: 1 1 auto;
-  background: #1e2740;
+  background: none;
   color: var(--muted);
   border: none;
-  border-radius: 8px;
-  padding: 6px 10px;
-  font-size: 12px;
+  border-radius: 0;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  padding: 6px 2px 8px;
+  font-size: 13px;
   font-weight: 600;
   cursor: pointer;
 }
 
+.sidebar-tab:hover {
+  color: var(--text);
+}
+
 .sidebar-tab.active {
-  background: #3b82f6;
-  color: #fff;
+  color: var(--text);
+  border-bottom-color: #3b82f6;
 }
 
 .sidebar-tab-panel {
@@ -529,7 +536,7 @@ body {
   padding: 4px;
 }
 
-.sidebar button {
+.sidebar button:not(.sidebar-tab) {
   border: none;
   border-radius: 8px;
   padding: 6px 14px;
@@ -538,7 +545,7 @@ body {
   cursor: pointer;
 }
 
-.sidebar button:not(.secondary) {
+.sidebar button:not(.secondary):not(.sidebar-tab) {
   background: #3b82f6;
   color: #fff;
 }
