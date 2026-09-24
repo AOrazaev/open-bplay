@@ -1,10 +1,13 @@
 // Frame-bar wiring (Checkpoint 6): navigate the current play's frame
-// sequence, add/delete frames, and preview it as an animated playback.
-// Depends on globals declared in app.js (frames, currentFrameIndex,
-// tokens, lines, syncCurrentFrame, persistCourtState, resetInteractionState,
-// redraw, playbackTokens) and on the pure helpers in js/frames.js
-// (cloneFrame, advanceFrameByArrows, frameTransitionDurationMs,
-// interpolateFrameTokens).
+// sequence, add/delete frames, preview it as an animated playback, and
+// render the Frames sidebar tab's thumbnail list. Depends on globals
+// declared in app.js (frames, currentFrameIndex, tokens, lines,
+// syncCurrentFrame, persistCourtState, resetInteractionState, redraw,
+// playbackTokens), on the pure helpers in js/frames.js (cloneFrame,
+// advanceFrameByArrows, frameTransitionDurationMs, interpolateFrameTokens),
+// and on drawCourt/courtToCanvas/COURT_WIDTH_FT/COURT_LENGTH_FT from
+// court.js plus drawLines/drawTokens from lines.js/tokens.js for the
+// thumbnails.
 
 const prevFrameBtn = document.querySelector('#prevFrameBtn');
 const nextFrameBtn = document.querySelector('#nextFrameBtn');
@@ -13,6 +16,7 @@ const advanceFrameBtn = document.querySelector('#advanceFrameBtn');
 const deleteFrameBtn = document.querySelector('#deleteFrameBtn');
 const playFramesBtn = document.querySelector('#playFramesBtn');
 const frameLabelEl = document.querySelector('#frameLabel');
+const framesListEl = document.querySelector('#framesList');
 
 let playbackHandle = null; // requestAnimationFrame id while playback is running
 let playbackStartIndex = 0; // frame Play was pressed from, restored when it stops
@@ -21,9 +25,62 @@ function isPlaying() {
   return playbackHandle !== null;
 }
 
+// Renders one frame's { tokens, lines } onto a small offscreen canvas for
+// the Frames tab's thumbnail list — reuses the same drawCourt/drawLines/
+// drawTokens functions the live canvas and image export use, just at a
+// much smaller fixed resolution.
+const FRAME_THUMB_WIDTH_PX = 160;
+
+function renderFrameThumbCanvas(frameTokens, frameLines) {
+  const heightPx = Math.round(FRAME_THUMB_WIDTH_PX * (COURT_LENGTH_FT / COURT_WIDTH_FT));
+  const canvas = document.createElement('canvas');
+  canvas.width = FRAME_THUMB_WIDTH_PX;
+  canvas.height = heightPx;
+  const ctx = canvas.getContext('2d');
+  drawCourt(ctx, canvas.width, canvas.height);
+  const map = courtToCanvas(canvas.width, canvas.height);
+  drawLines(ctx, frameLines, frameTokens, map);
+  drawTokens(ctx, frameTokens, map);
+  return canvas;
+}
+
+// Rebuilds the Frames tab's thumbnail list from `frames`. The current
+// frame's own tokens/lines are read from the live `tokens`/`lines`
+// globals rather than `frames[currentFrameIndex]`, since those are only
+// written back into `frames` by syncCurrentFrame() — reading the live
+// globals instead means an in-progress edit (e.g. a line just drawn)
+// shows up in its thumbnail immediately, without needing a sync call.
+function renderFramesPanel() {
+  framesListEl.innerHTML = '';
+  frames.forEach((frame, index) => {
+    const isCurrent = index === currentFrameIndex;
+    const frameTokens = isCurrent ? tokens : frame.tokens;
+    const frameLines = isCurrent ? lines : frame.lines;
+
+    const item = document.createElement('button');
+    item.type = 'button';
+    item.className = 'frame-thumb';
+    if (isCurrent) item.classList.add('current');
+    item.title = `Go to frame ${index + 1}`;
+
+    const canvas = renderFrameThumbCanvas(frameTokens, frameLines);
+    canvas.className = 'frame-thumb-canvas';
+    const label = document.createElement('span');
+    label.className = 'frame-thumb-label';
+    label.textContent = `Frame ${index + 1}`;
+
+    item.append(canvas, label);
+    item.addEventListener('click', () => {
+      if (index !== currentFrameIndex) goToFrame(index);
+    });
+    framesListEl.appendChild(item);
+  });
+}
+
 // Reflects `frames`/`currentFrameIndex` in the frame bar's label and
-// button enabled-state. Called after every navigation/add/delete, and by
-// app.js after Clear/loading a play replaces the whole sequence.
+// button enabled-state, and refreshes the Frames tab's thumbnails. Called
+// after every navigation/add/delete, and by app.js after Clear/loading a
+// play replaces the whole sequence, or a line is drawn/deleted.
 function updateFrameBar() {
   frameLabelEl.textContent = `Frame ${currentFrameIndex + 1} of ${frames.length}`;
   prevFrameBtn.disabled = isPlaying() || currentFrameIndex === 0;
@@ -33,6 +90,7 @@ function updateFrameBar() {
   // Only meaningful once at least one arrow has been drawn on this frame.
   advanceFrameBtn.disabled = isPlaying() || lines.length === 0;
   playFramesBtn.disabled = isPlaying() ? false : frames.length <= 1;
+  renderFramesPanel();
 }
 
 // Switches the live tokens/lines to point at `index` (assumed already a

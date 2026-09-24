@@ -279,6 +279,92 @@ body {
   display: none;
 }
 
+/* Switches between the Plays and Frames panels below the top-of-sidebar
+   action buttons (currently just Export Image). Only one panel is shown
+   at a time; each keeps its own scroll/content untouched while hidden,
+   same rationale as the sidebar's own collapse (width: 0 rather than
+   unmounting) for the tree state. */
+.sidebar-tabs {
+  display: flex;
+  gap: 4px;
+}
+
+.sidebar-tab {
+  flex: 1 1 auto;
+  background: #1e2740;
+  color: var(--muted);
+  border: none;
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.sidebar-tab.active {
+  background: #3b82f6;
+  color: #fff;
+}
+
+.sidebar-tab-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.sidebar-tab-panel.hidden {
+  display: none;
+}
+
+.frames-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow-y: auto;
+  flex: 1 1 auto;
+  min-height: 60px;
+}
+
+.frame-thumb {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: #1e2740;
+  border: 2px solid transparent;
+  border-radius: 8px;
+  padding: 6px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.frame-thumb:hover {
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+.frame-thumb.current {
+  border-color: #3b82f6;
+  background: #24304f;
+}
+
+.frame-thumb-canvas {
+  width: 100%;
+  height: auto;
+  border-radius: 4px;
+  display: block;
+}
+
+.frame-thumb-label {
+  font-size: 11px;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.frame-thumb.current .frame-thumb-label {
+  color: var(--text);
+}
+
 .sidebar-title {
   margin: 0;
   font-size: 15px;

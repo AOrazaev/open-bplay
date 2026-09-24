@@ -325,3 +325,65 @@ test.describe('Checkpoint 6 — multi-step plays (frames)', () => {
     expect(state.passer.y).toBeCloseTo(30, 0);
   });
 });
+
+test.describe('Frames sidebar tab — thumbnail previews', () => {
+  test.use({ viewport: { width: 900, height: 1000 } });
+
+  test('switching to the Frames tab lists one thumbnail per frame, highlighting the current one', async ({ page }) => {
+    await page.goto('/');
+    await spawnTokenAt(page, 'offense', 10, 30);
+    await page.click('#addFrameBtn');
+    await spawnTokenAt(page, 'defense', 20, 25);
+    await page.click('#addFrameBtn');
+    await expect(page.locator('#frameLabel')).toHaveText('Frame 3 of 3');
+
+    await page.click('#framesTabBtn');
+    const thumbs = page.locator('#framesList .frame-thumb');
+    await expect(thumbs).toHaveCount(3);
+    // Each thumbnail draws its own <canvas>, one per frame.
+    await expect(page.locator('#framesList .frame-thumb-canvas')).toHaveCount(3);
+    await expect(thumbs.nth(2)).toHaveClass(/current/);
+    await expect(thumbs.nth(0)).not.toHaveClass(/current/);
+    await expect(thumbs.nth(2).locator('.frame-thumb-label')).toHaveText('Frame 3');
+  });
+
+  test('clicking a thumbnail jumps to that frame', async ({ page }) => {
+    await page.goto('/');
+    await spawnTokenAt(page, 'offense', 10, 30);
+    await page.click('#addFrameBtn');
+    await spawnTokenAt(page, 'defense', 20, 25);
+
+    await page.click('#framesTabBtn');
+    await page.locator('#framesList .frame-thumb').nth(0).click();
+
+    await expect(page.locator('#frameLabel')).toHaveText('Frame 1 of 2');
+    await expect(page.locator('#framesList .frame-thumb').nth(0)).toHaveClass(/current/);
+    await expect(page.locator('#framesList .frame-thumb').nth(1)).not.toHaveClass(/current/);
+  });
+
+  test('drawing a line on the current frame refreshes its thumbnail without switching tabs', async ({ page }) => {
+    await page.goto('/');
+    await spawnTokenAt(page, 'offense', 10, 30);
+    await page.click('#framesTabBtn');
+
+    const before = await page.locator('#framesList .frame-thumb-canvas').nth(0).evaluate(c => c.toDataURL());
+
+    await page.click('.tool-btn[data-tool="cut"]');
+    const start = await page.evaluate(() => {
+      const canvas = document.querySelector('#courtCanvas');
+      return courtFeetToClientPoint(canvas, tokens[0].x, tokens[0].y);
+    });
+    const target = await page.evaluate(() => {
+      const canvas = document.querySelector('#courtCanvas');
+      return courtFeetToClientPoint(canvas, 30, 20);
+    });
+    await page.mouse.move(start.x, start.y);
+    await page.mouse.down();
+    await page.mouse.move(target.x, target.y, { steps: 5 });
+    await page.mouse.up();
+    await expect.poll(() => page.evaluate(() => lines.length)).toBe(1);
+
+    const after = await page.locator('#framesList .frame-thumb-canvas').nth(0).evaluate(c => c.toDataURL());
+    expect(after).not.toBe(before);
+  });
+});

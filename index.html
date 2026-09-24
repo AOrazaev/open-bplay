@@ -17,19 +17,33 @@
         <button id="exportImageBtn" class="secondary sidebar-export-btn">Export Image</button>
       </div>
 
-      <h2 class="sidebar-title">Plays</h2>
-      <p class="sidebar-hint">Organize plays into folders. Click a folder to select it as the save location; double-click a name to rename it.</p>
-
-      <div class="plays-toolbar">
-        <button type="button" class="plays-location" id="playsLocation" title="Go to the library root">Saving to: Root</button>
-        <button id="newFolderBtn" class="secondary" title="New folder here">+ Folder</button>
+      <div class="sidebar-tabs" role="tablist">
+        <button type="button" class="sidebar-tab" id="playsTabBtn" role="tab" aria-controls="playsTabPanel">Plays</button>
+        <button type="button" class="sidebar-tab" id="framesTabBtn" role="tab" aria-controls="framesTabPanel">Frames</button>
       </div>
 
-      <ul class="plays-tree" id="playsTree"></ul>
+      <div class="sidebar-tab-panel" id="playsTabPanel" role="tabpanel" aria-labelledby="playsTabBtn">
+        <h2 class="sidebar-title">Plays</h2>
+        <p class="sidebar-hint">Organize plays into folders. Click a folder to select it as the save location; double-click a name to rename it.</p>
 
-      <div class="plays-save-row">
-        <input id="playNameInput" type="text" placeholder="Play name" maxlength="60" aria-label="Play name" />
-        <button id="savePlayBtn">Save</button>
+        <div class="plays-toolbar">
+          <button type="button" class="plays-location" id="playsLocation" title="Go to the library root">Saving to: Root</button>
+          <button id="newFolderBtn" class="secondary" title="New folder here">+ Folder</button>
+        </div>
+
+        <ul class="plays-tree" id="playsTree"></ul>
+
+        <div class="plays-save-row">
+          <input id="playNameInput" type="text" placeholder="Play name" maxlength="60" aria-label="Play name" />
+          <button id="savePlayBtn">Save</button>
+        </div>
+      </div>
+
+      <div class="sidebar-tab-panel" id="framesTabPanel" role="tabpanel" aria-labelledby="framesTabBtn">
+        <h2 class="sidebar-title">Frames</h2>
+        <p class="sidebar-hint">Preview of this play's frame sequence. Click a frame to jump to it; use the controls under the court to add, advance, or delete frames.</p>
+
+        <div class="frames-list" id="framesList"></div>
       </div>
     </aside>
 
