@@ -386,4 +386,41 @@ test.describe('Frames sidebar tab — thumbnail previews', () => {
     const after = await page.locator('#framesList .frame-thumb-canvas').nth(0).evaluate(c => c.toDataURL());
     expect(after).not.toBe(before);
   });
+
+  test('moving, spawning, or removing a token refreshes the current frame thumbnail too', async ({ page }) => {
+    await page.goto('/');
+    await spawnTokenAt(page, 'offense', 10, 30);
+    await page.click('#framesTabBtn');
+
+    const afterSpawn = await page.locator('#framesList .frame-thumb-canvas').nth(0).evaluate(c => c.toDataURL());
+
+    // Drag the existing token to a new spot.
+    const from = await page.evaluate(() => {
+      const canvas = document.querySelector('#courtCanvas');
+      return courtFeetToClientPoint(canvas, tokens[0].x, tokens[0].y);
+    });
+    const to = await page.evaluate(() => {
+      const canvas = document.querySelector('#courtCanvas');
+      return courtFeetToClientPoint(canvas, 25, 15);
+    });
+    await page.mouse.move(from.x, from.y);
+    await page.mouse.down();
+    await page.mouse.move(to.x, to.y, { steps: 5 });
+    await page.mouse.up();
+    await expect.poll(() => page.evaluate(() => tokens[0].x)).toBeCloseTo(25, 0);
+
+    const afterMove = await page.locator('#framesList .frame-thumb-canvas').nth(0).evaluate(c => c.toDataURL());
+    expect(afterMove).not.toBe(afterSpawn);
+
+    // Remove it via double-click.
+    const point = await page.evaluate(() => {
+      const canvas = document.querySelector('#courtCanvas');
+      return courtFeetToClientPoint(canvas, tokens[0].x, tokens[0].y);
+    });
+    await page.mouse.dblclick(point.x, point.y);
+    await expect.poll(() => page.evaluate(() => tokens.length)).toBe(0);
+
+    const afterRemove = await page.locator('#framesList .frame-thumb-canvas').nth(0).evaluate(c => c.toDataURL());
+    expect(afterRemove).not.toBe(afterMove);
+  });
 });

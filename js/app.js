@@ -88,6 +88,7 @@ function removeToken(id) {
   tokens = tokens.filter(t => t.id !== id);
   lines = lines.filter(l => l.originTokenId !== id && l.endTokenId !== id);
   persistCourtState();
+  updateFrameBar(); // refresh this frame's thumbnail, and Apply Arrows' enabled state if a cascaded line was its last one
 }
 
 function countOf(type) {
@@ -139,6 +140,7 @@ trayChips.forEach(chip => {
     if (preview && countOf(dropType) < maxFor(dropType)) {
       tokens.push(createToken(dropType, label, preview.x, preview.y));
       persistCourtState();
+      updateFrameBar(); // refresh this frame's thumbnail with the newly spawned token
     }
     redraw();
   }
@@ -570,6 +572,7 @@ function endDrag(e) {
   } else if (token) {
     token.removing = false;
     persistCourtState();
+    updateFrameBar(); // refresh this frame's thumbnail with the token's new position
   }
   redraw();
 }
