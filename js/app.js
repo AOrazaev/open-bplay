@@ -58,12 +58,15 @@ let selectedLineId = null; // line currently showing its curve/endpoint handles
 let curveDrag = null; // { lineId, pointerId } — dragging a selected line's curve handle
 let endpointDrag = null; // { lineId, pointerId } — dragging a selected line's free-endpoint handle
 let playbackTokens = null; // non-null only while frame-sequence playback (js/frames-ui.js) is animating
+let playbackHighlights = null; // the source frame's highlights for the segment currently animating
 
 const redraw = setupCourtCanvas(courtCanvas, (ctx, map) => {
   if (playbackTokens) {
-    // During playback we only show the interpolated token positions —
-    // no lines, no selection handles, no in-progress drag previews — a
-    // clean animated preview of how the play's frames flow together.
+    // During playback we show the departing frame's highlights alongside
+    // the interpolated token positions, but no lines, selection handles,
+    // or in-progress drag previews — a clean animated preview of how the
+    // play's frames flow together.
+    drawHighlights(ctx, playbackHighlights || [], map);
     drawTokens(ctx, playbackTokens, map);
     return;
   }

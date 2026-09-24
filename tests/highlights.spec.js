@@ -72,6 +72,18 @@ test.describe('Freehand court highlighter', () => {
     expect(advanced).toBe(0);
   });
 
+  test('a highlight remains visible while playing back the frame sequence', async ({ page }) => {
+    await page.goto('/');
+    await page.locator('.tool-btn[data-tool="highlight"]').click();
+    await dragHighlightStroke(page, 10, 20, 30, 20);
+    await page.locator('.tool-btn[data-tool="highlight"]').click(); // deselect
+
+    await page.click('#addFrameBtn');
+    await page.click('#playFramesBtn');
+    await expect.poll(() => page.evaluate(() => !!playbackHighlights)).toBe(true);
+    expect(await page.evaluate(() => playbackHighlights.length)).toBe(1);
+  });
+
   test('a highlight is saved and restored when the play is reloaded from the library', async ({ page }) => {
     await page.goto('/');
     await page.locator('.tool-btn[data-tool="highlight"]').click();

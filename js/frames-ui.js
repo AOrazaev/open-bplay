@@ -161,6 +161,7 @@ function stopPlayback(restoreIndex = playbackStartIndex) {
   if (playbackHandle !== null) cancelAnimationFrame(playbackHandle);
   playbackHandle = null;
   playbackTokens = null;
+  playbackHighlights = null;
   playFramesBtn.textContent = '▶ Play';
   goToFrame(restoreIndex);
 }
@@ -186,6 +187,7 @@ playFramesBtn.addEventListener('click', () => {
     if (segmentStart === null) segmentStart = now;
     const elapsedMs = now - segmentStart;
     playbackTokens = interpolateFrameTokens(frames[segment].tokens, frames[segment + 1].tokens, elapsedMs, segmentDurationMs);
+    playbackHighlights = frames[segment].highlights;
     redraw();
 
     if (elapsedMs >= segmentDurationMs) {
