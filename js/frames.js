@@ -1,15 +1,19 @@
 // Multi-step play data helpers (Checkpoint 6): a play is a sequence of
-// frames, each an independent { tokens, lines } snapshot. Pure data
-// helpers only — no DOM/event wiring (that lives in js/frames-ui.js),
+// frames, each an independent { tokens, lines, highlights } snapshot. Pure
+// data helpers only — no DOM/event wiring (that lives in js/frames-ui.js),
 // mirrors the split used by court.js/tokens.js/lines.js.
 
 // A brand-new play starts as a single empty frame.
 function createInitialFrames() {
-  return [{ tokens: [], lines: [] }];
+  return [{ tokens: [], lines: [], highlights: [] }];
 }
 
 function cloneFrame(frame) {
-  return { tokens: structuredClone(frame.tokens), lines: structuredClone(frame.lines) };
+  return {
+    tokens: structuredClone(frame.tokens),
+    lines: structuredClone(frame.lines),
+    highlights: structuredClone(frame.highlights || []),
+  };
 }
 
 // Builds the *next* frame's starting point by applying every line drawn
@@ -64,7 +68,10 @@ function advanceFrameByArrows(frame) {
     }
   });
 
-  return { tokens: newTokens, lines: [] };
+  // Highlights annotate a specific moment's spacing rather than describing
+  // a movement to carry forward, so — like lines — the advanced frame
+  // starts without them, ready for fresh annotations.
+  return { tokens: newTokens, lines: [], highlights: [] };
 }
 
 // Accepts whatever a legacy (pre-frames) single-snapshot shape or the
@@ -78,11 +85,15 @@ function normalizeFrames(raw) {
     const currentFrameIndex = Number.isInteger(raw.currentFrameIndex)
       ? Math.min(Math.max(raw.currentFrameIndex, 0), raw.frames.length - 1)
       : 0;
-    return { frames: raw.frames, currentFrameIndex };
+    // Frames saved before the highlight feature existed have no
+    // `highlights` field — default it to empty rather than requiring a
+    // one-off migration pass.
+    const frames = raw.frames.map(f => (Array.isArray(f.highlights) ? f : { ...f, highlights: [] }));
+    return { frames, currentFrameIndex };
   }
   // Legacy shape: a single { tokens, lines } snapshot with no frames.
   if (raw && Array.isArray(raw.tokens) && Array.isArray(raw.lines)) {
-    return { frames: [{ tokens: raw.tokens, lines: raw.lines }], currentFrameIndex: 0 };
+    return { frames: [{ tokens: raw.tokens, lines: raw.lines, highlights: [] }], currentFrameIndex: 0 };
   }
   return null;
 }

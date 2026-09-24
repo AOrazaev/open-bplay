@@ -72,6 +72,7 @@
         <button class="tool-btn" data-tool="pass">Pass</button>
         <button class="tool-btn" data-tool="screen">Screen</button>
         <button class="tool-btn" data-tool="dribble">Dribble</button>
+        <button class="tool-btn" data-tool="highlight" title="Draw a translucent highlight over an area of the court">Highlight</button>
       </div>
 
       <main class="court-wrap">
@@ -88,13 +89,14 @@
         <button id="playFramesBtn" class="secondary" title="Play back the frame sequence">▶ Play</button>
       </div>
 
-      <p class="hint">Drag a token from the tray onto the court to place it. Drag a token off the court (or double-click it) to remove it. Select a line tool, then drag from a token to draw a cut/pass/screen/dribble — click the tool again for move mode. Click a line to select it, then drag its curve handle to bend it, or drag its endpoint to move it, detach it from a token, or attach it to a different token. Double-click a line to remove it.</p>
+      <p class="hint">Drag a token from the tray onto the court to place it. Drag a token off the court (or double-click it) to remove it. Select a line tool, then drag from a token to draw a cut/pass/screen/dribble — click the tool again for move mode. Click a line to select it, then drag its curve handle to bend it, or drag its endpoint to move it, detach it from a token, or attach it to a different token. Double-click a line to remove it. Select Highlight, then drag anywhere on the court to draw a translucent freehand highlight over an area — double-click a highlight to remove it.</p>
     </div>
   </div>
 
   <script src="js/court.js"></script>
   <script src="js/tokens.js"></script>
   <script src="js/lines.js"></script>
+  <script src="js/highlights.js"></script>
   <script src="js/frames.js"></script>
   <script src="js/plays.js"></script>
   <script src="js/sidebar.js"></script>

@@ -1,15 +1,16 @@
 // Play-as-image export -----------------------------------------------------
-// Renders the current court (background + tokens + lines) onto a plain
-// offscreen <canvas> at a fixed export resolution, reusing the exact same
-// drawCourt/drawTokens/drawLines functions the live canvas uses — just
-// without any selection handles or in-progress drag previews — then
-// copies the resulting PNG to the clipboard, falling back to a download
-// if the Clipboard API isn't available. Mirrors the `rotations` app's
-// js/export.js pattern (canvas -> blob -> clipboard-or-download).
+// Renders the current court (background + highlights + tokens + lines)
+// onto a plain offscreen <canvas> at a fixed export resolution, reusing
+// the exact same drawCourt/drawHighlights/drawTokens/drawLines functions
+// the live canvas uses — just without any selection handles or
+// in-progress drag previews — then copies the resulting PNG to the
+// clipboard, falling back to a download if the Clipboard API isn't
+// available. Mirrors the `rotations` app's js/export.js pattern (canvas
+// -> blob -> clipboard-or-download).
 
 const EXPORT_WIDTH_PX = 1600;
 
-function renderCourtExportCanvas(tokens, lines) {
+function renderCourtExportCanvas(tokens, lines, highlights) {
   const heightPx = Math.round(EXPORT_WIDTH_PX * (COURT_LENGTH_FT / COURT_WIDTH_FT));
   const canvas = document.createElement('canvas');
   canvas.width = EXPORT_WIDTH_PX;
@@ -17,6 +18,7 @@ function renderCourtExportCanvas(tokens, lines) {
   const ctx = canvas.getContext('2d');
   drawCourt(ctx, canvas.width, canvas.height);
   const map = courtToCanvas(canvas.width, canvas.height);
+  drawHighlights(ctx, highlights || [], map);
   drawLines(ctx, lines, tokens, map);
   drawTokens(ctx, tokens, map);
   return canvas;
@@ -52,7 +54,7 @@ exportImageBtn.addEventListener('click', async () => {
   const filename = exportFilename();
 
   async function tryCopyThenDownload() {
-    const canvas = renderCourtExportCanvas(tokens, lines);
+    const canvas = renderCourtExportCanvas(tokens, lines, highlights);
     const blob = await canvasToBlob(canvas);
     if (!blob) throw new Error('Could not create image.');
     if (navigator.clipboard && window.ClipboardItem) {
@@ -71,7 +73,7 @@ exportImageBtn.addEventListener('click', async () => {
     // clipboard permission) — fall back to a plain download rather than
     // leaving the user with no way to get the image at all.
     try {
-      const canvas = renderCourtExportCanvas(tokens, lines);
+      const canvas = renderCourtExportCanvas(tokens, lines, highlights);
       const blob = await canvasToBlob(canvas);
       if (!blob) throw new Error('Could not create image.');
       downloadBlob(blob, filename);

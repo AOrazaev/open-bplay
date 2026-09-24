@@ -34,7 +34,7 @@ function isPlaying() {
 // isn't soft on high-DPI/retina screens either.
 const FRAME_THUMB_WIDTH_PX = 420;
 
-function renderFrameThumbCanvas(frameTokens, frameLines) {
+function renderFrameThumbCanvas(frameTokens, frameLines, frameHighlights) {
   const dpr = window.devicePixelRatio || 1;
   const widthPx = Math.round(FRAME_THUMB_WIDTH_PX * dpr);
   const heightPx = Math.round(widthPx * (COURT_LENGTH_FT / COURT_WIDTH_FT));
@@ -44,23 +44,25 @@ function renderFrameThumbCanvas(frameTokens, frameLines) {
   const ctx = canvas.getContext('2d');
   drawCourt(ctx, canvas.width, canvas.height);
   const map = courtToCanvas(canvas.width, canvas.height);
+  drawHighlights(ctx, frameHighlights || [], map);
   drawLines(ctx, frameLines, frameTokens, map);
   drawTokens(ctx, frameTokens, map);
   return canvas;
 }
 
 // Rebuilds the Frames tab's thumbnail list from `frames`. The current
-// frame's own tokens/lines are read from the live `tokens`/`lines`
-// globals rather than `frames[currentFrameIndex]`, since those are only
-// written back into `frames` by syncCurrentFrame() — reading the live
-// globals instead means an in-progress edit (e.g. a line just drawn)
-// shows up in its thumbnail immediately, without needing a sync call.
+// frame's own tokens/lines/highlights are read from the live globals
+// rather than `frames[currentFrameIndex]`, since those are only written
+// back into `frames` by syncCurrentFrame() — reading the live globals
+// instead means an in-progress edit (e.g. a line just drawn) shows up in
+// its thumbnail immediately, without needing a sync call.
 function renderFramesPanel() {
   framesListEl.innerHTML = '';
   frames.forEach((frame, index) => {
     const isCurrent = index === currentFrameIndex;
     const frameTokens = isCurrent ? tokens : frame.tokens;
     const frameLines = isCurrent ? lines : frame.lines;
+    const frameHighlights = isCurrent ? highlights : frame.highlights;
 
     const item = document.createElement('button');
     item.type = 'button';
@@ -68,7 +70,7 @@ function renderFramesPanel() {
     if (isCurrent) item.classList.add('current');
     item.title = `Go to frame ${index + 1}`;
 
-    const canvas = renderFrameThumbCanvas(frameTokens, frameLines);
+    const canvas = renderFrameThumbCanvas(frameTokens, frameLines, frameHighlights);
     canvas.className = 'frame-thumb-canvas';
     const label = document.createElement('span');
     label.className = 'frame-thumb-label';
@@ -98,15 +100,16 @@ function updateFrameBar() {
   renderFramesPanel();
 }
 
-// Switches the live tokens/lines to point at `index` (assumed already a
-// valid slot in `frames`), without touching whatever is at the outgoing
-// index first — used by deleteFrameBtn below, since the frame being
-// switched *away from* there was just removed from the array entirely,
-// so there is nothing to sync back into it.
+// Switches the live tokens/lines/highlights to point at `index` (assumed
+// already a valid slot in `frames`), without touching whatever is at the
+// outgoing index first — used by deleteFrameBtn below, since the frame
+// being switched *away from* there was just removed from the array
+// entirely, so there is nothing to sync back into it.
 function applyFrameSwitch(index) {
   currentFrameIndex = index;
   tokens = frames[currentFrameIndex].tokens;
   lines = frames[currentFrameIndex].lines;
+  highlights = frames[currentFrameIndex].highlights;
   resetInteractionState();
   persistCourtState();
   updateFrameBar();

@@ -28,14 +28,15 @@ if (courtAutosave) {
 
 let tokens = frames[currentFrameIndex].tokens;
 let lines = frames[currentFrameIndex].lines;
+let highlights = frames[currentFrameIndex].highlights;
 
-// Writes the live tokens/lines back into the frames array at the current
-// index — needed before persisting or switching frames, since tokens/
-// lines are frequently *reassigned* (e.g. `tokens = tokens.filter(...)`)
+// Writes the live tokens/lines/highlights back into the frames array at
+// the current index — needed before persisting or switching frames,
+// since these are frequently *reassigned* (e.g. `tokens = tokens.filter(...)`)
 // rather than mutated in place, which would otherwise leave the frames
 // array holding a stale reference.
 function syncCurrentFrame() {
-  frames[currentFrameIndex] = { tokens, lines };
+  frames[currentFrameIndex] = { tokens, lines, highlights };
 }
 
 // Persists the current frame sequence as the court autosave. Called after
@@ -51,7 +52,8 @@ function persistCourtState() {
 let dragState = null; // { id, pointerId } — dragging an existing court token
 let spawnDrag = null; // { type, label, pointerId, preview: {x,y} | null } — dragging a new token in from the tray
 let lineDrag = null; // { type, originTokenId, pointerId, current: {x,y} } — drawing a new line from a token
-let activeTool = null; // one of LINE_TYPES, or null for plain move mode
+let highlightDrag = null; // { pointerId, points: [{x,y}] } — drawing a new freehand highlight stroke
+let activeTool = null; // one of LINE_TYPES, 'highlight', or null for plain move mode
 let selectedLineId = null; // line currently showing its curve/endpoint handles
 let curveDrag = null; // { lineId, pointerId } — dragging a selected line's curve handle
 let endpointDrag = null; // { lineId, pointerId } — dragging a selected line's free-endpoint handle
@@ -65,6 +67,7 @@ const redraw = setupCourtCanvas(courtCanvas, (ctx, map) => {
     drawTokens(ctx, playbackTokens, map);
     return;
   }
+  drawHighlights(ctx, highlights, map);
   drawLines(ctx, lines, tokens, map);
   drawTokens(ctx, tokens, map);
   if (spawnDrag && spawnDrag.preview) {
@@ -73,6 +76,9 @@ const redraw = setupCourtCanvas(courtCanvas, (ctx, map) => {
   if (lineDrag) {
     const previewLine = { type: lineDrag.type, originTokenId: lineDrag.originTokenId, endTokenId: null, endPoint: lineDrag.current };
     drawLine(ctx, previewLine, tokens, map, { preview: true });
+  }
+  if (highlightDrag && highlightDrag.points.length >= 2) {
+    drawHighlightStroke(ctx, { points: highlightDrag.points }, map, { preview: true });
   }
   if (selectedLineId) {
     const selectedLine = lines.find(l => l.id === selectedLineId);
@@ -157,6 +163,7 @@ function resetInteractionState() {
   dragState = null;
   spawnDrag = null;
   lineDrag = null;
+  highlightDrag = null;
   selectedLineId = null;
   curveDrag = null;
   endpointDrag = null;
@@ -167,6 +174,7 @@ clearCourtBtn.addEventListener('click', () => {
   currentFrameIndex = 0;
   tokens = frames[0].tokens;
   lines = frames[0].lines;
+  highlights = frames[0].highlights;
   resetInteractionState();
   persistCourtState();
   updateFrameBar();
@@ -364,6 +372,7 @@ function loadPlayEntry(entry) {
   currentFrameIndex = 0;
   tokens = frames[0].tokens;
   lines = frames[0].lines;
+  highlights = frames[0].highlights;
   resetInteractionState();
   playNameInput.value = entry.name;
   currentFolderId = entry.parentId;
@@ -437,6 +446,16 @@ updateToolPalette();
 courtCanvas.addEventListener('pointerdown', (e) => {
   const { x, y } = clientPointToFeet(courtCanvas, e.clientX, e.clientY);
 
+  // The highlight tool draws a freehand stroke regardless of what's under
+  // the pointer (a token, a selected line's handles, etc.), so it's
+  // handled first and bypasses every other hit-test below.
+  if (activeTool === 'highlight') {
+    highlightDrag = { pointerId: e.pointerId, points: [{ x, y }] };
+    courtCanvas.setPointerCapture(e.pointerId);
+    redraw();
+    return;
+  }
+
   if (!activeTool && selectedLineId) {
     const selectedLine = lines.find(l => l.id === selectedLineId);
     if (selectedLine) {
@@ -483,6 +502,15 @@ courtCanvas.addEventListener('pointerdown', (e) => {
 });
 
 courtCanvas.addEventListener('pointermove', (e) => {
+  if (highlightDrag && highlightDrag.pointerId === e.pointerId) {
+    const { x, y } = clientPointToFeet(courtCanvas, e.clientX, e.clientY);
+    const last = highlightDrag.points[highlightDrag.points.length - 1];
+    if (Math.hypot(x - last.x, y - last.y) >= HIGHLIGHT_MIN_POINT_SPACING_FT) {
+      highlightDrag.points.push({ x, y });
+    }
+    redraw();
+    return;
+  }
   if (curveDrag && curveDrag.pointerId === e.pointerId) {
     const line = lines.find(l => l.id === curveDrag.lineId);
     const pts = line && resolveLineEndpoints(line, tokens);
@@ -519,6 +547,18 @@ courtCanvas.addEventListener('pointermove', (e) => {
 const MIN_LINE_LENGTH_FT = 1;
 
 function endDrag(e) {
+  if (highlightDrag && highlightDrag.pointerId === e.pointerId) {
+    if (courtCanvas.hasPointerCapture(e.pointerId)) courtCanvas.releasePointerCapture(e.pointerId);
+    const { points } = highlightDrag;
+    highlightDrag = null;
+    if (points.length >= 2) {
+      highlights.push(createHighlightStroke(points));
+      persistCourtState();
+      updateFrameBar();
+    }
+    redraw();
+    return;
+  }
   if (curveDrag && curveDrag.pointerId === e.pointerId) {
     if (courtCanvas.hasPointerCapture(e.pointerId)) courtCanvas.releasePointerCapture(e.pointerId);
     curveDrag = null;
@@ -594,6 +634,14 @@ courtCanvas.addEventListener('dblclick', (e) => {
     lines = lines.filter(l => l.id !== hitLine.id);
     persistCourtState();
     updateFrameBar(); // Apply Arrows may become disabled again if that was the last line
+    redraw();
+    return;
+  }
+  const hitHighlight = findHighlightAt(highlights, x, y);
+  if (hitHighlight) {
+    highlights = highlights.filter(h => h.id !== hitHighlight.id);
+    persistCourtState();
+    updateFrameBar();
     redraw();
   }
 });
