@@ -342,8 +342,7 @@ body {
   border: 2px solid transparent;
   border-radius: 8px;
   padding: 6px;
-  cursor: pointer;
-  text-align: left;
+  position: relative;
 }
 
 .frame-thumb:hover {
@@ -353,6 +352,18 @@ body {
 .frame-thumb.current {
   border-color: #3b82f6;
   background: #24304f;
+}
+
+.frame-thumb-select {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
 }
 
 .frame-thumb-canvas {
@@ -370,6 +381,29 @@ body {
 
 .frame-thumb.current .frame-thumb-label {
   color: var(--text);
+}
+
+.frame-thumb-actions {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  gap: 2px;
+}
+
+.frame-thumb-duplicate-btn {
+  background: rgba(11, 15, 26, 0.75);
+  border: none;
+  color: var(--text);
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+  padding: 3px 6px;
+  border-radius: 4px;
+}
+
+.frame-thumb-duplicate-btn:hover {
+  background: #3b82f6;
 }
 
 .sidebar-title {
@@ -536,7 +570,7 @@ body {
   padding: 4px;
 }
 
-.sidebar button:not(.sidebar-tab) {
+.sidebar button:not(.sidebar-tab):not(.frame-thumb-select):not(.frame-thumb-duplicate-btn) {
   border: none;
   border-radius: 8px;
   padding: 6px 14px;
@@ -545,7 +579,7 @@ body {
   cursor: pointer;
 }
 
-.sidebar button:not(.secondary):not(.sidebar-tab) {
+.sidebar button:not(.secondary):not(.sidebar-tab):not(.frame-thumb-select):not(.frame-thumb-duplicate-btn) {
   background: #3b82f6;
   color: #fff;
 }

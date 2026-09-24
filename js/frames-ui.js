@@ -64,11 +64,14 @@ function renderFramesPanel() {
     const frameLines = isCurrent ? lines : frame.lines;
     const frameHighlights = isCurrent ? highlights : frame.highlights;
 
-    const item = document.createElement('button');
-    item.type = 'button';
+    const item = document.createElement('div');
     item.className = 'frame-thumb';
     if (isCurrent) item.classList.add('current');
-    item.title = `Go to frame ${index + 1}`;
+
+    const selectBtn = document.createElement('button');
+    selectBtn.type = 'button';
+    selectBtn.className = 'frame-thumb-select';
+    selectBtn.title = `Go to frame ${index + 1}`;
 
     const canvas = renderFrameThumbCanvas(frameTokens, frameLines, frameHighlights);
     canvas.className = 'frame-thumb-canvas';
@@ -76,10 +79,17 @@ function renderFramesPanel() {
     label.className = 'frame-thumb-label';
     label.textContent = `Frame ${index + 1}`;
 
-    item.append(canvas, label);
-    item.addEventListener('click', () => {
+    selectBtn.append(canvas, label);
+    selectBtn.addEventListener('click', () => {
       if (index !== currentFrameIndex) goToFrame(index);
     });
+
+    const actions = document.createElement('div');
+    actions.className = 'frame-thumb-actions';
+    const duplicateBtn = createTreeButton('frame-thumb-duplicate-btn', '⧉', `Duplicate frame ${index + 1}`, () => duplicateFrameAt(index));
+    actions.append(duplicateBtn);
+
+    item.append(selectBtn, actions);
     framesListEl.appendChild(item);
   });
 }
@@ -122,6 +132,22 @@ function applyFrameSwitch(index) {
 function goToFrame(index) {
   syncCurrentFrame();
   applyFrameSwitch(index);
+}
+
+// Inserts a copy of frames[index] right after it, from the Frames tab's
+// per-thumbnail duplicate button — unlike goToFrame/applyFrameSwitch,
+// this never touches the live tokens/lines/highlights globals or resets
+// interaction state: whichever frame is currently active keeps the exact
+// same object reference (just possibly at a shifted index), so an
+// in-progress edit on it is untouched. `syncCurrentFrame()` still runs
+// first so duplicating the *current* frame captures its latest edits.
+function duplicateFrameAt(index) {
+  syncCurrentFrame();
+  const duplicated = cloneFrame(frames[index]);
+  frames.splice(index + 1, 0, duplicated);
+  if (currentFrameIndex > index) currentFrameIndex++;
+  persistCourtState();
+  updateFrameBar();
 }
 
 prevFrameBtn.addEventListener('click', () => {

@@ -361,6 +361,43 @@ test.describe('Frames sidebar tab — thumbnail previews', () => {
     await expect(page.locator('#framesList .frame-thumb').nth(1)).not.toHaveClass(/current/);
   });
 
+  test('clicking a thumbnail\'s duplicate button inserts a copy right after it', async ({ page }) => {
+    await page.goto('/');
+    await spawnTokenAt(page, 'offense', 10, 30);
+    await page.click('#addFrameBtn');
+    await spawnTokenAt(page, 'defense', 20, 25);
+    // Now on frame 2 of 2; go back to frame 1 so we can verify duplicating
+    // a *non-current* frame doesn't disturb the currently active one.
+    await page.click('#prevFrameBtn');
+    await expect(page.locator('#frameLabel')).toHaveText('Frame 1 of 2');
+
+    await page.click('#framesTabBtn');
+    await page.locator('#framesList .frame-thumb').nth(1).locator('.frame-thumb-duplicate-btn').click();
+
+    await expect(page.locator('#framesList .frame-thumb')).toHaveCount(3);
+    // Frame 1 is still the active/current frame, just shifted by nothing
+    // (the duplicate landed after it, at index 2).
+    await expect(page.locator('#frameLabel')).toHaveText('Frame 1 of 3');
+    await expect(page.locator('#framesList .frame-thumb').nth(0)).toHaveClass(/current/);
+    // The duplicated frame (originally frame 2's defense token) carried
+    // over into the new frame 3.
+    const frame3Tokens = await page.evaluate(() => frames[2].tokens.length);
+    expect(frame3Tokens).toBe(2);
+  });
+
+  test('duplicating the current frame keeps it selected and inserts the copy after it', async ({ page }) => {
+    await page.goto('/');
+    await spawnTokenAt(page, 'offense', 10, 30);
+    await page.click('#framesTabBtn');
+    await page.locator('#framesList .frame-thumb').nth(0).locator('.frame-thumb-duplicate-btn').click();
+
+    await expect(page.locator('#framesList .frame-thumb')).toHaveCount(2);
+    await expect(page.locator('#frameLabel')).toHaveText('Frame 1 of 2');
+    await expect(page.locator('#framesList .frame-thumb').nth(0)).toHaveClass(/current/);
+    const frame2Tokens = await page.evaluate(() => frames[1].tokens.length);
+    expect(frame2Tokens).toBe(1);
+  });
+
   test('drawing a line on the current frame refreshes its thumbnail without switching tabs', async ({ page }) => {
     await page.goto('/');
     await spawnTokenAt(page, 'offense', 10, 30);
