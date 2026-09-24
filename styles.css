@@ -122,6 +122,11 @@ body {
   white-space: nowrap;
 }
 
+.tray button.secondary:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 .tool-palette {
   display: flex;
   gap: 8px;

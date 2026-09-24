@@ -3,11 +3,13 @@
 // render the Frames sidebar tab's thumbnail list. Depends on globals
 // declared in app.js (frames, currentFrameIndex, tokens, lines,
 // syncCurrentFrame, persistCourtState, resetInteractionState, redraw,
-// playbackTokens), on the pure helpers in js/frames.js (cloneFrame,
-// advanceFrameByArrows, frameTransitionDurationMs, interpolateFrameTokens),
-// and on drawCourt/courtToCanvas/COURT_WIDTH_FT/COURT_LENGTH_FT from
-// court.js plus drawLines/drawTokens from lines.js/tokens.js for the
-// thumbnails.
+// playbackTokens), on recordHistory from js/history.js (loaded after this
+// file — only called from inside event-handler bodies, never at parse
+// time, so load order is safe), on the pure helpers in js/frames.js
+// (cloneFrame, advanceFrameByArrows, frameTransitionDurationMs,
+// interpolateFrameTokens), and on drawCourt/courtToCanvas/COURT_WIDTH_FT/
+// COURT_LENGTH_FT from court.js plus drawLines/drawTokens from
+// lines.js/tokens.js for the thumbnails.
 
 const prevFrameBtn = document.querySelector('#prevFrameBtn');
 const nextFrameBtn = document.querySelector('#nextFrameBtn');
@@ -114,6 +116,10 @@ function updateFrameBar() {
   advanceFrameBtn.disabled = isPlaying() || lines.length === 0;
   playFramesBtn.disabled = isPlaying() ? false : frames.length <= 1;
   renderFramesPanel();
+  // history.js loads after this file, so guard against calling this
+  // during frames-ui.js's own bootstrap (its very first updateFrameBar()
+  // call happens before history.js has run and defined the function).
+  if (typeof updateHistoryButtons === 'function') updateHistoryButtons();
 }
 
 // Switches the live tokens/lines/highlights to point at `index` (assumed
@@ -153,6 +159,7 @@ function duplicateFrameAt(index) {
   frames.splice(index + 1, 0, duplicated);
   if (currentFrameIndex > index) currentFrameIndex++;
   persistCourtState();
+  recordHistory();
   updateFrameBar();
 }
 
@@ -169,12 +176,14 @@ function deleteFrameAt(index) {
   if (index === currentFrameIndex) {
     frames.splice(index, 1);
     applyFrameSwitch(Math.min(index, frames.length - 1));
+    recordHistory();
     return;
   }
   syncCurrentFrame();
   frames.splice(index, 1);
   if (currentFrameIndex > index) currentFrameIndex--;
   persistCourtState();
+  recordHistory();
   updateFrameBar();
 }
 
@@ -191,6 +200,7 @@ addFrameBtn.addEventListener('click', () => {
   const duplicated = cloneFrame(frames[currentFrameIndex]);
   frames.splice(currentFrameIndex + 1, 0, duplicated);
   goToFrame(currentFrameIndex + 1);
+  recordHistory();
 });
 
 advanceFrameBtn.addEventListener('click', () => {
@@ -199,6 +209,7 @@ advanceFrameBtn.addEventListener('click', () => {
   const advanced = advanceFrameByArrows(frames[currentFrameIndex]);
   frames.splice(currentFrameIndex + 1, 0, advanced);
   goToFrame(currentFrameIndex + 1);
+  recordHistory();
 });
 
 deleteFrameBtn.addEventListener('click', () => {

@@ -97,6 +97,7 @@ function removeToken(id) {
   tokens = tokens.filter(t => t.id !== id);
   lines = lines.filter(l => l.originTokenId !== id && l.endTokenId !== id);
   persistCourtState();
+  recordHistory();
   updateFrameBar(); // refresh this frame's thumbnail, and Apply Arrows' enabled state if a cascaded line was its last one
 }
 
@@ -149,6 +150,7 @@ trayChips.forEach(chip => {
     if (preview && countOf(dropType) < maxFor(dropType)) {
       tokens.push(createToken(dropType, label, preview.x, preview.y));
       persistCourtState();
+      recordHistory();
       updateFrameBar(); // refresh this frame's thumbnail with the newly spawned token
     }
     redraw();
@@ -180,6 +182,7 @@ clearCourtBtn.addEventListener('click', () => {
   highlights = frames[0].highlights;
   resetInteractionState();
   persistCourtState();
+  recordHistory();
   updateFrameBar();
   redraw();
 });
@@ -381,6 +384,7 @@ function loadPlayEntry(entry) {
   currentFolderId = entry.parentId;
   renderPlaysTree();
   persistCourtState();
+  resetHistory();
   updateFrameBar();
   redraw();
 }
@@ -557,6 +561,7 @@ function endDrag(e) {
     if (points.length >= 2) {
       highlights.push(createHighlightStroke(points));
       persistCourtState();
+      recordHistory();
       updateFrameBar();
     }
     redraw();
@@ -566,6 +571,7 @@ function endDrag(e) {
     if (courtCanvas.hasPointerCapture(e.pointerId)) courtCanvas.releasePointerCapture(e.pointerId);
     curveDrag = null;
     persistCourtState();
+    recordHistory();
     redraw();
     return;
   }
@@ -581,6 +587,7 @@ function endDrag(e) {
       }
     }
     persistCourtState();
+    recordHistory();
     redraw();
     return;
   }
@@ -599,6 +606,7 @@ function endDrag(e) {
         activeTool = null;
         updateToolPalette();
         persistCourtState();
+        recordHistory();
         updateFrameBar(); // Apply Arrows becomes available once a line exists
       }
     }
@@ -615,6 +623,7 @@ function endDrag(e) {
   } else if (token) {
     token.removing = false;
     persistCourtState();
+    recordHistory();
     updateFrameBar(); // refresh this frame's thumbnail with the token's new position
   }
   redraw();
@@ -636,6 +645,7 @@ courtCanvas.addEventListener('dblclick', (e) => {
     if (selectedLineId === hitLine.id) selectedLineId = null;
     lines = lines.filter(l => l.id !== hitLine.id);
     persistCourtState();
+    recordHistory();
     updateFrameBar(); // Apply Arrows may become disabled again if that was the last line
     redraw();
     return;
@@ -644,6 +654,7 @@ courtCanvas.addEventListener('dblclick', (e) => {
   if (hitHighlight) {
     highlights = highlights.filter(h => h.id !== hitHighlight.id);
     persistCourtState();
+    recordHistory();
     updateFrameBar();
     redraw();
   }
