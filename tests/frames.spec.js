@@ -398,6 +398,48 @@ test.describe('Frames sidebar tab — thumbnail previews', () => {
     expect(frame2Tokens).toBe(1);
   });
 
+  test('clicking a thumbnail\'s delete button removes a non-current frame, shifting the current index down if needed', async ({ page }) => {
+    await page.goto('/');
+    await spawnTokenAt(page, 'offense', 10, 30);
+    await page.click('#addFrameBtn');
+    await spawnTokenAt(page, 'defense', 20, 25);
+    await expect(page.locator('#frameLabel')).toHaveText('Frame 2 of 2');
+
+    await page.click('#framesTabBtn');
+    await page.locator('#framesList .frame-thumb').nth(0).locator('.frame-thumb-delete-btn').click();
+
+    await expect(page.locator('#framesList .frame-thumb')).toHaveCount(1);
+    // Frame 2 is now frame 1, and stays the current frame — its own
+    // tokens/edits were never touched by deleting the other frame. It
+    // was duplicated from frame 1 by addFrameBtn, so it carries both the
+    // offense token and the defense token spawned onto it.
+    await expect(page.locator('#frameLabel')).toHaveText('Frame 1 of 1');
+    const tokenCount = await page.evaluate(() => tokens.length);
+    expect(tokenCount).toBe(2);
+  });
+
+  test('clicking a thumbnail\'s delete button on the current frame switches to a neighboring frame', async ({ page }) => {
+    await page.goto('/');
+    await spawnTokenAt(page, 'offense', 10, 30);
+    await page.click('#addFrameBtn');
+    await spawnTokenAt(page, 'defense', 20, 25);
+    await expect(page.locator('#frameLabel')).toHaveText('Frame 2 of 2');
+
+    await page.click('#framesTabBtn');
+    await page.locator('#framesList .frame-thumb').nth(1).locator('.frame-thumb-delete-btn').click();
+
+    await expect(page.locator('#framesList .frame-thumb')).toHaveCount(1);
+    await expect(page.locator('#frameLabel')).toHaveText('Frame 1 of 1');
+    const tokenCount = await page.evaluate(() => tokens.length);
+    expect(tokenCount).toBe(1); // back to frame 1's offense-only token
+  });
+
+  test('the delete button is disabled when only one frame remains', async ({ page }) => {
+    await page.goto('/');
+    await page.click('#framesTabBtn');
+    await expect(page.locator('#framesList .frame-thumb-delete-btn')).toBeDisabled();
+  });
+
   test('drawing a line on the current frame refreshes its thumbnail without switching tabs', async ({ page }) => {
     await page.goto('/');
     await spawnTokenAt(page, 'offense', 10, 30);

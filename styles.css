@@ -391,7 +391,8 @@ body {
   gap: 2px;
 }
 
-.frame-thumb-duplicate-btn {
+.frame-thumb-duplicate-btn,
+.frame-thumb-delete-btn {
   background: rgba(11, 15, 26, 0.75);
   border: none;
   color: var(--text);
@@ -404,6 +405,15 @@ body {
 
 .frame-thumb-duplicate-btn:hover {
   background: #3b82f6;
+}
+
+.frame-thumb-delete-btn:hover {
+  background: #ff6b6b;
+}
+
+.frame-thumb-delete-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 .sidebar-title {
@@ -570,7 +580,7 @@ body {
   padding: 4px;
 }
 
-.sidebar button:not(.sidebar-tab):not(.frame-thumb-select):not(.frame-thumb-duplicate-btn) {
+.sidebar button:not(.sidebar-tab):not(.frame-thumb-select):not(.frame-thumb-duplicate-btn):not(.frame-thumb-delete-btn) {
   border: none;
   border-radius: 8px;
   padding: 6px 14px;
@@ -579,7 +589,7 @@ body {
   cursor: pointer;
 }
 
-.sidebar button:not(.secondary):not(.sidebar-tab):not(.frame-thumb-select):not(.frame-thumb-duplicate-btn) {
+.sidebar button:not(.secondary):not(.sidebar-tab):not(.frame-thumb-select):not(.frame-thumb-duplicate-btn):not(.frame-thumb-delete-btn) {
   background: #3b82f6;
   color: #fff;
 }

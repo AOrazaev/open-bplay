@@ -87,7 +87,9 @@ function renderFramesPanel() {
     const actions = document.createElement('div');
     actions.className = 'frame-thumb-actions';
     const duplicateBtn = createTreeButton('frame-thumb-duplicate-btn', '⧉', `Duplicate frame ${index + 1}`, () => duplicateFrameAt(index));
-    actions.append(duplicateBtn);
+    const deleteBtn = createTreeButton('frame-thumb-delete-btn', '🗑', `Delete frame ${index + 1}`, () => deleteFrameAt(index));
+    if (frames.length <= 1) deleteBtn.disabled = true;
+    actions.append(duplicateBtn, deleteBtn);
 
     item.append(selectBtn, actions);
     framesListEl.appendChild(item);
@@ -150,6 +152,28 @@ function duplicateFrameAt(index) {
   updateFrameBar();
 }
 
+// Removes frames[index], from either the toolbar Delete Frame button
+// (index === currentFrameIndex) or a thumbnail's per-frame delete button
+// (any index). Refuses to remove the last remaining frame — a play
+// always needs at least one. Deleting the frame currently being edited
+// mirrors applyFrameSwitch's existing behavior (no sync-back, since it's
+// being discarded); deleting any other frame just shifts
+// currentFrameIndex down if it came after the removed one, leaving the
+// live tokens/lines/highlights globals untouched.
+function deleteFrameAt(index) {
+  if (frames.length <= 1) return;
+  if (index === currentFrameIndex) {
+    frames.splice(index, 1);
+    applyFrameSwitch(Math.min(index, frames.length - 1));
+    return;
+  }
+  syncCurrentFrame();
+  frames.splice(index, 1);
+  if (currentFrameIndex > index) currentFrameIndex--;
+  persistCourtState();
+  updateFrameBar();
+}
+
 prevFrameBtn.addEventListener('click', () => {
   if (currentFrameIndex > 0) goToFrame(currentFrameIndex - 1);
 });
@@ -174,9 +198,7 @@ advanceFrameBtn.addEventListener('click', () => {
 });
 
 deleteFrameBtn.addEventListener('click', () => {
-  if (frames.length <= 1) return;
-  frames.splice(currentFrameIndex, 1);
-  applyFrameSwitch(Math.min(currentFrameIndex, frames.length - 1));
+  deleteFrameAt(currentFrameIndex);
 });
 
 // Stops any running playback animation. `restoreIndex` decides where the
