@@ -147,9 +147,16 @@ function ballDrawPositionFt(ballToken, playerTokens) {
 
 // Finds the topmost (last-drawn) token within hitRadiusFt of the given
 // court-space point, or null if none qualify. Used for pointer hit-testing.
+//
+// Mirrors drawTokens' visual z-order (balls always drawn on top of player
+// tokens, each group in its own array order) rather than raw array order,
+// so a coincident ball and player always hit-test the same one that's
+// visually on top.
 function findTokenAt(tokens, xFt, yFt, hitRadiusFt = TOKEN_RADIUS_FT * 1.3) {
-  for (let i = tokens.length - 1; i >= 0; i--) {
-    const t = tokens[i];
+  const players = tokens.filter(t => t.type !== TOKEN_TYPES.BALL);
+  const balls = tokens.filter(t => t.type === TOKEN_TYPES.BALL);
+  const topmostFirst = [...balls].reverse().concat([...players].reverse());
+  for (const t of topmostFirst) {
     if (Math.hypot(t.x - xFt, t.y - yFt) <= hitRadiusFt) return t;
   }
   return null;

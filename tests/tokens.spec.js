@@ -200,4 +200,29 @@ test.describe('Checkpoint 2 — tray-driven place & drag tokens', () => {
     }
     expect(result[result.length - 1]).toBeCloseTo(0, 5);
   });
+
+  test('hit-testing a coincident ball and player picks whichever is drawn on top (the ball)', async ({ page }) => {
+    // drawTokens always renders balls last (on top of players) regardless
+    // of array/spawn order. findTokenAt must agree with that visual order,
+    // even when the ball was added to the tokens array before the player.
+    await page.goto('/');
+    const result = await page.evaluate(() => {
+      const ball = { id: 'b1', type: 'ball', x: 20, y: 20 };
+      const player = { id: 'p1', type: 'offense', label: '1', x: 20, y: 20 };
+      const hit = findTokenAt([ball, player], 20, 20);
+      return hit && hit.id;
+    });
+    expect(result).toBe('b1');
+  });
+
+  test('hit-testing among multiple overlapping players picks the last-drawn (topmost) one', async ({ page }) => {
+    await page.goto('/');
+    const result = await page.evaluate(() => {
+      const p1 = { id: 'p1', type: 'offense', label: '1', x: 20, y: 20 };
+      const p2 = { id: 'p2', type: 'offense', label: '2', x: 20, y: 20 };
+      const hit = findTokenAt([p1, p2], 20, 20);
+      return hit && hit.id;
+    });
+    expect(result).toBe('p2');
+  });
 });
