@@ -27,14 +27,19 @@ function isPlaying() {
 
 // Renders one frame's { tokens, lines } onto a small offscreen canvas for
 // the Frames tab's thumbnail list — reuses the same drawCourt/drawLines/
-// drawTokens functions the live canvas and image export use, just at a
-// much smaller fixed resolution.
-const FRAME_THUMB_WIDTH_PX = 160;
+// drawTokens functions the live canvas and image export use. The CSS
+// display size is controlled by .frame-thumb-canvas (width: 100%); the
+// backing store is rendered well above that so it stays sharp even at
+// the sidebar's max width, and scaled further by devicePixelRatio so it
+// isn't soft on high-DPI/retina screens either.
+const FRAME_THUMB_WIDTH_PX = 420;
 
 function renderFrameThumbCanvas(frameTokens, frameLines) {
-  const heightPx = Math.round(FRAME_THUMB_WIDTH_PX * (COURT_LENGTH_FT / COURT_WIDTH_FT));
+  const dpr = window.devicePixelRatio || 1;
+  const widthPx = Math.round(FRAME_THUMB_WIDTH_PX * dpr);
+  const heightPx = Math.round(widthPx * (COURT_LENGTH_FT / COURT_WIDTH_FT));
   const canvas = document.createElement('canvas');
-  canvas.width = FRAME_THUMB_WIDTH_PX;
+  canvas.width = widthPx;
   canvas.height = heightPx;
   const ctx = canvas.getContext('2d');
   drawCourt(ctx, canvas.width, canvas.height);
