@@ -90,6 +90,75 @@ test.describe('Checkpoint 2 — tray-driven place & drag tokens', () => {
     expect(Math.hypot(after.x - before.x, after.y - before.y)).toBeGreaterThan(5);
   });
 
+  test('dragging a player who is holding the ball carries the ball along', async ({ page }) => {
+    await page.goto('/');
+    await spawnTokenAt(page, 'offense', 10, 30);
+    // Slightly offset from the player (not exactly coincident) so a click
+    // on the player's own dot unambiguously grabs the player, while still
+    // being well within the possession/carry threshold.
+    await spawnTokenAt(page, 'ball', 10.5, 30);
+
+    const startPoint = await page.evaluate(() => {
+      const canvas = document.querySelector('#courtCanvas');
+      const player = tokens.find(t => t.type === TOKEN_TYPES.OFFENSE);
+      return courtFeetToClientPoint(canvas, player.x, player.y);
+    });
+    const targetFt = { x: 30, y: 15 };
+    const targetPoint = await page.evaluate(({ x, y }) => {
+      const canvas = document.querySelector('#courtCanvas');
+      return courtFeetToClientPoint(canvas, x, y);
+    }, targetFt);
+
+    await page.mouse.move(startPoint.x, startPoint.y);
+    await page.mouse.down();
+    await page.mouse.move(targetPoint.x, targetPoint.y, { steps: 5 });
+    await page.mouse.up();
+
+    const positions = await page.evaluate(() => ({
+      player: (() => { const p = tokens.find(t => t.type === TOKEN_TYPES.OFFENSE); return { x: p.x, y: p.y }; })(),
+      ball: (() => { const b = tokens.find(t => t.type === TOKEN_TYPES.BALL); return { x: b.x, y: b.y }; })(),
+    }));
+    expect(positions.player.x).toBeCloseTo(targetFt.x, 0);
+    expect(positions.player.y).toBeCloseTo(targetFt.y, 0);
+    // The ball moved by (roughly) the same delta as the player, staying
+    // right where it started relative to them (0.5ft to the right).
+    expect(positions.ball.x).toBeCloseTo(targetFt.x + 0.5, 0);
+    expect(positions.ball.y).toBeCloseTo(targetFt.y, 0);
+  });
+
+  test('dragging a player who is NOT holding the ball leaves the ball in place', async ({ page }) => {
+    await page.goto('/');
+    await spawnTokenAt(page, 'offense', 10, 30);
+    await spawnTokenAt(page, 'ball', 25, 10); // far away — not held
+
+    const ballBefore = await page.evaluate(() => {
+      const b = tokens.find(t => t.type === TOKEN_TYPES.BALL);
+      return { x: b.x, y: b.y };
+    });
+
+    const startPoint = await page.evaluate(() => {
+      const canvas = document.querySelector('#courtCanvas');
+      const player = tokens.find(t => t.type === TOKEN_TYPES.OFFENSE);
+      return courtFeetToClientPoint(canvas, player.x, player.y);
+    });
+    const targetPoint = await page.evaluate(() => {
+      const canvas = document.querySelector('#courtCanvas');
+      return courtFeetToClientPoint(canvas, 30, 15);
+    });
+
+    await page.mouse.move(startPoint.x, startPoint.y);
+    await page.mouse.down();
+    await page.mouse.move(targetPoint.x, targetPoint.y, { steps: 5 });
+    await page.mouse.up();
+
+    const ballAfter = await page.evaluate(() => {
+      const b = tokens.find(t => t.type === TOKEN_TYPES.BALL);
+      return { x: b.x, y: b.y };
+    });
+    expect(ballAfter.x).toBeCloseTo(ballBefore.x, 0);
+    expect(ballAfter.y).toBeCloseTo(ballBefore.y, 0);
+  });
+
   test('dragging a token outside the court removes it', async ({ page }) => {
     await page.goto('/');
     await spawnTokenAt(page, 'offense', 10, 30);

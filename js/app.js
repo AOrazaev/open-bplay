@@ -496,7 +496,16 @@ courtCanvas.addEventListener('pointerdown', (e) => {
       return;
     }
     selectedLineId = null; // picking up a token deselects any line
-    dragState = { id: hit.id, pointerId: e.pointerId };
+    dragState = {
+      id: hit.id,
+      pointerId: e.pointerId,
+      lastX: hit.x,
+      lastY: hit.y,
+      // Captured once at drag start (not recomputed per move) so the
+      // ball stays attached to this same carrier for the whole drag, even
+      // if the drag briefly passes closer to another player mid-move.
+      carriedBallId: findCarriedBallId(tokens, hit.id),
+    };
     courtCanvas.setPointerCapture(e.pointerId);
     return;
   }
@@ -543,9 +552,21 @@ courtCanvas.addEventListener('pointermove', (e) => {
   const token = tokens.find(t => t.id === dragState.id);
   if (!token) return;
   const { x, y } = clientPointToFeet(courtCanvas, e.clientX, e.clientY);
+  // Carry any ball this token picked up at drag-start along by the same
+  // delta, so it visibly travels with the player rather than snapping
+  // to a new spot only once the drag ends.
+  if (dragState.carriedBallId) {
+    const ball = tokens.find(t => t.id === dragState.carriedBallId);
+    if (ball) {
+      ball.x += x - dragState.lastX;
+      ball.y += y - dragState.lastY;
+    }
+  }
   token.x = x;
   token.y = y;
   token.removing = !isWithinCourt(x, y);
+  dragState.lastX = x;
+  dragState.lastY = y;
   redraw();
 });
 

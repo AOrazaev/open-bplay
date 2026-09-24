@@ -145,21 +145,58 @@ function ballDrawPositionFt(ballToken, playerTokens) {
   };
 }
 
-// Finds the topmost (last-drawn) token within hitRadiusFt of the given
-// court-space point, or null if none qualify. Used for pointer hit-testing.
+// Finds the ball (if any) currently "held by" playerToken — i.e. the ball
+// is within BALL_CARRY_THRESHOLD_FT of it *and* playerToken is the
+// nearest player token to that ball (same possession rule ballDrawPositionFt
+// uses for the draw-time nudge). Used to drag a carried ball along
+// live while its carrier is being dragged, so the ball doesn't get left
+// behind mid-move the way it would if possession were only recomputed on
+// drop.
+function findCarriedBallId(tokens, playerId) {
+  const player = tokens.find(t => t.id === playerId);
+  if (!player || player.type === TOKEN_TYPES.BALL) return null;
+  const players = tokens.filter(t => t.type !== TOKEN_TYPES.BALL);
+  const balls = tokens.filter(t => t.type === TOKEN_TYPES.BALL);
+  for (const ball of balls) {
+    let carrier = null;
+    let carrierDistFt = Infinity;
+    players.forEach(t => {
+      const d = Math.hypot(t.x - ball.x, t.y - ball.y);
+      if (d < carrierDistFt) {
+        carrierDistFt = d;
+        carrier = t;
+      }
+    });
+    if (carrier && carrier.id === playerId && carrierDistFt < BALL_CARRY_THRESHOLD_FT) return ball.id;
+  }
+  return null;
+}
+
+// Finds the token nearest to the given court-space point, within
+// hitRadiusFt, or null if none qualify. Used for pointer hit-testing.
 //
-// Mirrors drawTokens' visual z-order (balls always drawn on top of player
-// tokens, each group in its own array order) rather than raw array order,
-// so a coincident ball and player always hit-test the same one that's
-// visually on top.
+// Picks the *nearest* token rather than just the first one found within
+// range — this matters once a ball is carried near a player (see
+// findCarriedBallId), since both are then within hit radius of a click
+// on the player, and the player being the exact click target should win.
+// Exact ties (most commonly a fully coincident ball+player, or several
+// stacked players) fall back to drawTokens' visual z-order (balls drawn
+// last/on top of players, each group in its own array order), so clicking
+// dead-center on a stack still grabs whichever one is visually on top.
 function findTokenAt(tokens, xFt, yFt, hitRadiusFt = TOKEN_RADIUS_FT * 1.3) {
   const players = tokens.filter(t => t.type !== TOKEN_TYPES.BALL);
   const balls = tokens.filter(t => t.type === TOKEN_TYPES.BALL);
   const topmostFirst = [...balls].reverse().concat([...players].reverse());
+  let best = null;
+  let bestDistFt = Infinity;
   for (const t of topmostFirst) {
-    if (Math.hypot(t.x - xFt, t.y - yFt) <= hitRadiusFt) return t;
+    const d = Math.hypot(t.x - xFt, t.y - yFt);
+    if (d <= hitRadiusFt && d < bestDistFt) {
+      best = t;
+      bestDistFt = d;
+    }
   }
-  return null;
+  return best;
 }
 
 // A token is considered "on the court" only while its center is within the
