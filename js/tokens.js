@@ -9,7 +9,10 @@ const MAX_DEFENSE_TOKENS = 5;
 // How close a ball token's center must be to a player's before we treat it
 // as "held by" that player for drawing purposes (e.g. right after a
 // dribble/pass arrow is applied, which moves both to the same point).
-const BALL_CARRY_THRESHOLD_FT = TOKEN_RADIUS_FT;
+// Relaxed 25% beyond the player's own radius so possession (and the
+// drag-carry behavior in app.js) still kicks in even when the ball isn't
+// placed exactly on the player.
+const BALL_CARRY_THRESHOLD_FT = TOKEN_RADIUS_FT * 1.25;
 // How far, in feet, a carried ball is nudged away from the hoop — enough
 // to read as offset from the player's number rather than dead-center on
 // it, while still overlapping the player (per design: "intersects, but
