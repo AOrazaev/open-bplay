@@ -95,6 +95,32 @@ test.describe('Checkpoint 7 — undo/redo', () => {
     await expect.poll(() => page.evaluate(() => tokens.length)).toBe(1);
   });
 
+  test('Undo of a content edit stays on the frame you navigated to, rather than jumping to wherever a previous edit left the frame bar', async ({ page }) => {
+    await page.goto('/');
+    await page.click('#addFrameBtn');
+    await page.click('#addFrameBtn');
+    await expect(page.locator('#frameLabel')).toHaveText('Frame 3 of 3');
+
+    // Pure navigation away from the frame the last edit (the 2nd Add
+    // Frame) left us on — this must NOT be recorded as history.
+    await page.click('#prevFrameBtn');
+    await expect(page.locator('#frameLabel')).toHaveText('Frame 2 of 3');
+
+    await spawnTokenAt(page, 'offense', 10, 30);
+    await expect.poll(() => page.evaluate(() => tokens.length)).toBe(1);
+
+    await page.click('#undoBtn');
+    // Only the token spawn should be undone; the view must stay on
+    // Frame 2, not jump back to Frame 3 (where the previous history
+    // entry happened to be recorded).
+    await expect(page.locator('#frameLabel')).toHaveText('Frame 2 of 3');
+    await expect.poll(() => page.evaluate(() => tokens.length)).toBe(0);
+
+    await page.click('#redoBtn');
+    await expect(page.locator('#frameLabel')).toHaveText('Frame 2 of 3');
+    await expect.poll(() => page.evaluate(() => tokens.length)).toBe(1);
+  });
+
   test('Ctrl+Z / Ctrl+Y keyboard shortcuts trigger undo/redo, but not while a text input is focused', async ({ page }) => {
     await page.goto('/');
     await spawnTokenAt(page, 'offense', 10, 30);

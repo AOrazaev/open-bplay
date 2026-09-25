@@ -7,9 +7,12 @@
 // system. Pure frame *navigation* (Prev/Next, clicking a thumbnail, Play/
 // step-animate landing on a frame) is intentionally NOT recorded here;
 // only the explicit recordHistory() calls sprinkled at each edit's call
-// site in app.js/frames-ui.js add a history entry. Depends on globals
-// declared in app.js (frames, currentFrameIndex, tokens, lines,
-// highlights, resetInteractionState, persistCourtState, redraw) and on
+// site in app.js/frames-ui.js add a history entry. Navigation instead
+// calls syncHistoryFrameIndex() (below), keeping the active entry's
+// stored frame index truthful so an Undo of a same-frame edit doesn't
+// also jump the view to a stale frame. Depends on globals declared in
+// app.js (frames, currentFrameIndex, tokens, lines, highlights,
+// resetInteractionState, persistCourtState, redraw) and on
 // updateFrameBar/isPlaying from frames-ui.js (loaded just before this).
 
 const HISTORY_LIMIT = 50; // cap so an very long editing session doesn't grow this unboundedly
@@ -46,6 +49,22 @@ function resetHistory() {
   historyStack = [cloneHistorySnapshot()];
   historyIndex = 0;
   updateHistoryButtons();
+}
+
+// Pure frame navigation (Prev/Next, a thumbnail click, Play/Stop landing
+// on a frame) never pushes a new history entry (see header comment), but
+// without this it would leave the *active* entry's stored
+// currentFrameIndex stale: it'd still say whichever frame was active the
+// last time an edit was recorded, not wherever the user has since
+// navigated to. Undo would then jump back to that stale frame instead of
+// staying put — call this right after any such navigation so the active
+// entry's frame index always matches what's actually on screen, and an
+// Undo of a same-frame edit doesn't also yank the view to another frame.
+// Never call this after a frame add/duplicate/delete's own navigation —
+// its immediately-following recordHistory() already captures the new
+// frame index correctly, in a new entry.
+function syncHistoryFrameIndex() {
+  if (historyStack[historyIndex]) historyStack[historyIndex].currentFrameIndex = currentFrameIndex;
 }
 
 // Records the current state as a new history entry — call right after an

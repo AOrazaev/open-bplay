@@ -85,7 +85,10 @@ function renderFramesPanel() {
 
     selectBtn.append(canvas, label);
     selectBtn.addEventListener('click', () => {
-      if (index !== currentFrameIndex) goToFrame(index);
+      if (index !== currentFrameIndex) {
+        goToFrame(index);
+        syncHistoryFrameIndex();
+      }
     });
 
     const actions = document.createElement('div');
@@ -188,11 +191,17 @@ function deleteFrameAt(index) {
 }
 
 prevFrameBtn.addEventListener('click', () => {
-  if (currentFrameIndex > 0) goToFrame(currentFrameIndex - 1);
+  if (currentFrameIndex > 0) {
+    goToFrame(currentFrameIndex - 1);
+    syncHistoryFrameIndex();
+  }
 });
 
 nextFrameBtn.addEventListener('click', () => {
-  if (currentFrameIndex < frames.length - 1) goToFrame(currentFrameIndex + 1);
+  if (currentFrameIndex < frames.length - 1) {
+    goToFrame(currentFrameIndex + 1);
+    syncHistoryFrameIndex();
+  }
 });
 
 addFrameBtn.addEventListener('click', () => {
@@ -230,6 +239,7 @@ function stopPlayback(restoreIndex = playbackStartIndex) {
   playbackHighlights = null;
   playFramesBtn.textContent = '▶ Play';
   goToFrame(restoreIndex);
+  syncHistoryFrameIndex();
 }
 
 // Animates through `indices` (an ordered list of frame indices, each
