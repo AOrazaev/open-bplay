@@ -41,6 +41,9 @@
         <div class="plays-save-row">
           <input id="playNameInput" type="text" placeholder="Play name" maxlength="60" aria-label="Play name" />
           <button id="savePlayBtn">Save</button>
+          <button id="exportCurrentPlayBtn" class="secondary" title="Export the current canvas (even if unsaved) as a JSON file">Export</button>
+          <button id="importCurrentPlayBtn" class="secondary" title="Load a play JSON file onto the canvas (not saved to the library until you press Save)">Load File</button>
+          <input type="file" id="importCurrentPlayInput" accept="application/json,.json" hidden />
         </div>
       </div>
 

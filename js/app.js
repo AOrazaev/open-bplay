@@ -13,6 +13,9 @@ const newFolderBtn = document.querySelector('#newFolderBtn');
 const exportLibraryBtn = document.querySelector('#exportLibraryBtn');
 const importPlaysBtn = document.querySelector('#importPlaysBtn');
 const importPlaysInput = document.querySelector('#importPlaysInput');
+const exportCurrentPlayBtn = document.querySelector('#exportCurrentPlayBtn');
+const importCurrentPlayBtn = document.querySelector('#importCurrentPlayBtn');
+const importCurrentPlayInput = document.querySelector('#importCurrentPlayInput');
 const playsLocationEl = document.querySelector('#playsLocation');
 const playsTreeEl = document.querySelector('#playsTree');
 
@@ -390,21 +393,29 @@ function renderPlaysTree() {
   persistViewState(currentFolderId, expandedFolderIds);
 }
 
-function loadPlayEntry(entry) {
-  const snapshot = loadPlaySnapshot(entry);
-  frames = snapshot.frames;
+// Replaces the live canvas state with `newFrames` (already deep-cloned by
+// the caller) and resets everything that's derived from "which play am I
+// looking at" — shared by loading a library entry and loading an imported
+// play file directly onto the canvas.
+function loadFramesOntoCanvas(newFrames, name) {
+  frames = newFrames;
   currentFrameIndex = 0;
   tokens = frames[0].tokens;
   lines = frames[0].lines;
   highlights = frames[0].highlights;
   resetInteractionState();
-  playNameInput.value = entry.name;
-  currentFolderId = entry.parentId;
-  renderPlaysTree();
+  playNameInput.value = name;
   persistCourtState();
   resetHistory();
   updateFrameBar();
   redraw();
+}
+
+function loadPlayEntry(entry) {
+  const snapshot = loadPlaySnapshot(entry);
+  currentFolderId = entry.parentId;
+  loadFramesOntoCanvas(snapshot.frames, entry.name);
+  renderPlaysTree();
 }
 
 // Deletes a folder/play, then makes sure `currentFolderId` still points
@@ -487,6 +498,32 @@ importPlaysInput.addEventListener('change', async () => {
   library = mergeImportedEntries(library, payload.entries, currentFolderId);
   persistLibrary(library);
   renderPlaysTree();
+});
+
+// Export/import for the play currently on the canvas, independent of the
+// library — lets a not-yet-saved (or since-modified) play be moved to
+// another device without first saving it, and without picking a folder.
+
+exportCurrentPlayBtn.addEventListener('click', () => {
+  syncCurrentFrame();
+  const name = playNameInput.value.trim() || 'Untitled Play';
+  const currentEntry = { id: crypto.randomUUID(), type: 'play', name, parentId: null, frames: frames.map(cloneFrame) };
+  downloadJSON(`${sanitizeFilename(name)}.play.json`, buildPlayExportPayload(currentEntry));
+});
+
+importCurrentPlayBtn.addEventListener('click', () => importCurrentPlayInput.click());
+
+importCurrentPlayInput.addEventListener('change', async () => {
+  const file = importCurrentPlayInput.files[0];
+  importCurrentPlayInput.value = ''; // reset so re-selecting the same file still fires 'change'
+  if (!file) return;
+  const payload = parseImportPayload(await file.text());
+  const playToLoad = payload && payload.entries.find(e => e.type === 'play');
+  if (!playToLoad) {
+    alert("That file isn't a valid Play Drawing export, or doesn't contain a play.");
+    return;
+  }
+  loadFramesOntoCanvas(loadPlaySnapshot(playToLoad).frames, playToLoad.name);
 });
 
 renderPlaysTree();
