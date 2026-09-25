@@ -10,6 +10,9 @@ const toolButtons = [...document.querySelectorAll('.tool-btn')];
 const playNameInput = document.querySelector('#playNameInput');
 const savePlayBtn = document.querySelector('#savePlayBtn');
 const newFolderBtn = document.querySelector('#newFolderBtn');
+const exportLibraryBtn = document.querySelector('#exportLibraryBtn');
+const importPlaysBtn = document.querySelector('#importPlaysBtn');
+const importPlaysInput = document.querySelector('#importPlaysInput');
 const playsLocationEl = document.querySelector('#playsLocation');
 const playsTreeEl = document.querySelector('#playsTree');
 
@@ -365,8 +368,11 @@ function renderPlaysTreeChildren(container, parentId, depth) {
         loadPlayEntry(entry);
       });
       const deleteBtn = createTreeButton('delete-btn', '×', `Delete ${entry.name}`, () => deleteEntryAndReconcile(entry));
+      const exportBtn = createTreeButton('export-btn', '⬇', `Export ${entry.name}`, () => {
+        downloadJSON(`${sanitizeFilename(entry.name)}.play.json`, buildPlayExportPayload(entry));
+      });
 
-      row.append(spacer, nameEl, deleteBtn);
+      row.append(spacer, nameEl, exportBtn, deleteBtn);
       li.appendChild(row);
     }
 
@@ -432,6 +438,53 @@ savePlayBtn.addEventListener('click', () => {
   if (!name) return;
   syncCurrentFrame();
   library = saveNamedPlay(library, name, frames, currentFolderId);
+  persistLibrary(library);
+  renderPlaysTree();
+});
+
+// --- Export/import: move plays across devices as a plain JSON file,
+// since localStorage never leaves the device it's set on. -----------------
+
+// Triggers a browser download of `payload` (any JSON-serializable value)
+// as a file named `filename` — the standard Blob+object-URL+synthetic-
+// click approach, needing no server or extra dependency.
+function downloadJSON(filename, payload) {
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+// Strips characters that are unsafe/awkward in a filename on common
+// filesystems, so an exported play's name (which may contain almost
+// anything, per playNameInput's own lack of restrictions) always turns
+// into a usable download name.
+function sanitizeFilename(name) {
+  return name.replace(/[^a-z0-9-_]+/gi, '-').replace(/^-+|-+$/g, '') || 'play';
+}
+
+exportLibraryBtn.addEventListener('click', () => {
+  const dateStamp = new Date().toISOString().slice(0, 10);
+  downloadJSON(`open-bplay-library-${dateStamp}.json`, buildLibraryExportPayload(library));
+});
+
+importPlaysBtn.addEventListener('click', () => importPlaysInput.click());
+
+importPlaysInput.addEventListener('change', async () => {
+  const file = importPlaysInput.files[0];
+  importPlaysInput.value = ''; // reset so re-selecting the same file still fires 'change'
+  if (!file) return;
+  const payload = parseImportPayload(await file.text());
+  if (!payload) {
+    alert("That file isn't a valid Play Drawing export.");
+    return;
+  }
+  library = mergeImportedEntries(library, payload.entries, currentFolderId);
   persistLibrary(library);
   renderPlaysTree();
 });

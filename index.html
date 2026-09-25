@@ -28,7 +28,12 @@
 
         <div class="plays-toolbar">
           <button type="button" class="plays-location" id="playsLocation" title="Go to the library root">Saving to: Root</button>
-          <button id="newFolderBtn" class="secondary" title="New folder here">+ Folder</button>
+          <div class="plays-toolbar-actions">
+            <button id="newFolderBtn" class="secondary" title="New folder here">+ Folder</button>
+            <button id="exportLibraryBtn" class="secondary" title="Export the whole library as a JSON file">Export All</button>
+            <button id="importPlaysBtn" class="secondary" title="Import a library or play JSON file, into the currently selected folder">Import</button>
+            <input type="file" id="importPlaysInput" accept="application/json,.json" hidden />
+          </div>
         </div>
 
         <ul class="plays-tree" id="playsTree"></ul>

@@ -167,6 +167,93 @@ function renameEntry(library, id, newName) {
   return library;
 }
 
+// --- Export/import: move plays/folders between devices as a plain JSON
+// file (localStorage itself never leaves the device it's set on) --------
+
+const LIBRARY_EXPORT_KIND = 'open-bplay-library';
+const PLAY_EXPORT_KIND = 'open-bplay-play';
+const EXPORT_FORMAT_VERSION = 1;
+
+// Whole-library export: every folder/play as-is (each play's own schema —
+// current `frames` or a pre-Checkpoint-6 legacy `{ tokens, lines }` — is
+// left untouched, since loadPlaySnapshot's normalizeFrames migrates
+// either shape on load anyway, on *any* device).
+function buildLibraryExportPayload(library) {
+  return { kind: LIBRARY_EXPORT_KIND, version: EXPORT_FORMAT_VERSION, exportedAt: Date.now(), entries: library };
+}
+
+// Single-play export: one play entry, with its parentId cleared so
+// mergeImportedEntries treats it as a root of the imported batch (i.e.
+// anchors it under wherever the *importing* device currently has
+// selected, rather than trying to preserve the exporting device's own
+// folder structure).
+function buildPlayExportPayload(playEntry) {
+  return {
+    kind: PLAY_EXPORT_KIND,
+    version: EXPORT_FORMAT_VERSION,
+    exportedAt: Date.now(),
+    entries: [{ ...playEntry, parentId: null }],
+  };
+}
+
+// Parses and shape-validates a File's text as an export payload, or
+// returns null for anything that isn't recognizably one of ours (wrong
+// JSON shape, a totally unrelated file, corrupted text, etc.) — the only
+// signal the importing UI needs to decide whether to proceed or show an
+// error.
+function parseImportPayload(jsonText) {
+  let parsed;
+  try {
+    parsed = JSON.parse(jsonText);
+  } catch (_) {
+    return null;
+  }
+  if (!parsed || typeof parsed !== 'object') return null;
+  if (parsed.kind !== LIBRARY_EXPORT_KIND && parsed.kind !== PLAY_EXPORT_KIND) return null;
+  if (!Array.isArray(parsed.entries)) return null;
+  return parsed;
+}
+
+// Like uniqueSiblingName, but suffixes "(2)", "(3)"... instead of " 2",
+// " 3" — used only to resolve import naming conflicts, so a merged-in
+// duplicate reads distinctly from the auto-numbered "New Folder 2" style
+// used when creating a folder.
+function uniqueImportName(library, parentId, baseName) {
+  const siblingNames = new Set(library.filter(e => e.parentId === parentId).map(e => e.name));
+  if (!siblingNames.has(baseName)) return baseName;
+  let n = 2;
+  while (siblingNames.has(`${baseName} (${n})`)) n++;
+  return `${baseName} (${n})`;
+}
+
+// Grafts an exported `entries` subtree (see buildLibraryExportPayload /
+// buildPlayExportPayload) into `library`, underneath `anchorParentId`,
+// without colliding with existing ids or same-level (same parentId)
+// names. `entries` must list parents before their children (true of both
+// export builders above, since a plain top-to-bottom copy of `library`
+// already satisfies that, and a single play has no children to worry
+// about) — that ordering lets each child's parentId remap resolve
+// through `idMap` before the child itself is processed.
+//
+// Id collisions (most commonly: re-importing the exact same file, whose
+// entries still carry their original ids) get a fresh id rather than
+// being skipped/merged — this always keeps both the existing and
+// incoming copies, deferring to the name-uniquing below to keep them
+// visually distinguishable; nothing here tries to detect "this is really
+// the same play" and de-duplicate it.
+function mergeImportedEntries(library, entries, anchorParentId) {
+  const idMap = new Map(); // original entry id -> id actually used in the merged library
+  const merged = [...library];
+  entries.forEach(entry => {
+    const remappedParentId = entry.parentId == null ? anchorParentId : (idMap.get(entry.parentId) ?? entry.parentId);
+    const finalId = merged.some(e => e.id === entry.id) ? crypto.randomUUID() : entry.id;
+    idMap.set(entry.id, finalId);
+    const name = uniqueImportName(merged, remappedParentId, entry.name);
+    merged.push({ ...entry, id: finalId, parentId: remappedParentId, name });
+  });
+  return merged;
+}
+
 // The folder path from root down to `folderId` (inclusive), as an array
 // of names — e.g. ['Root', 'Sets', 'Horns']. `folderId === null` is the
 // root itself. Used to render the sidebar's "Saving to: ..." breadcrumb.
