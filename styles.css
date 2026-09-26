@@ -221,6 +221,14 @@ body {
   gap: 10px;
   overflow: hidden;
   transition: width 0.15s ease, margin 0.15s ease, opacity 0.15s ease;
+  /* Bounded (not just stretched) to the viewport and pinned in place, so
+     the sidebar never grows past what's visible — without this, only a
+     min-height cascaded down from .app-layout, so a tall main panel made
+     the whole sidebar (and its Frames tab) grow along with the page
+     instead of scrolling its own content internally. */
+  position: sticky;
+  top: 16px;
+  max-height: calc(100vh - 32px);
 }
 
 /* Suppressed while actively dragging the resize handle, so the width
@@ -245,7 +253,9 @@ body {
 
 .sidebar-toggle {
   flex: 0 0 auto;
-  align-self: center;
+  align-self: flex-start;
+  position: sticky;
+  top: 16px;
   width: 18px;
   height: 56px;
   margin-right: 8px;
@@ -268,7 +278,10 @@ body {
    sidebar is collapsed, since there's nothing to resize at that point. */
 .sidebar-resize-handle {
   flex: 0 0 6px;
-  align-self: stretch;
+  align-self: flex-start;
+  position: sticky;
+  top: 16px;
+  height: calc(100vh - 32px);
   margin-right: 12px;
   border-radius: 3px;
   cursor: col-resize;

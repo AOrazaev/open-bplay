@@ -60,6 +60,14 @@ function renderFrameThumbCanvas(frameTokens, frameLines, frameHighlights) {
 // back into `frames` by syncCurrentFrame() — reading the live globals
 // instead means an in-progress edit (e.g. a line just drawn) shows up in
 // its thumbnail immediately, without needing a sync call.
+//
+// Tracks which frame index the list was last scrolled for, so switching
+// frames scrolls the newly-current thumbnail to the top of the (now
+// independently scrollable) list, without re-scrolling — and fighting
+// the user's own scroll position — on every re-render caused by editing
+// the same frame (a token drag, a line being drawn, etc.).
+let lastScrolledFrameIndex = -1;
+
 function renderFramesPanel() {
   framesListEl.innerHTML = '';
   frames.forEach((frame, index) => {
@@ -101,6 +109,12 @@ function renderFramesPanel() {
     item.append(selectBtn, actions);
     framesListEl.appendChild(item);
   });
+
+  if (currentFrameIndex !== lastScrolledFrameIndex) {
+    lastScrolledFrameIndex = currentFrameIndex;
+    const currentItem = framesListEl.querySelector('.frame-thumb.current');
+    if (currentItem) currentItem.scrollIntoView({ block: 'start', behavior: 'smooth' });
+  }
 }
 
 // Reflects `frames`/`currentFrameIndex` in the frame bar's label and

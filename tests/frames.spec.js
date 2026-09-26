@@ -482,6 +482,32 @@ test.describe('Frames sidebar tab — thumbnail previews', () => {
     await expect(page.locator('#framesList .frame-thumb-delete-btn')).toBeDisabled();
   });
 
+  test('switching frames scrolls the newly-current thumbnail to the top of the (independently scrollable) Frames list', async ({ page }) => {
+    await page.setViewportSize({ width: 900, height: 650 }); // short enough that the list can't show every thumbnail at once
+    await page.goto('/');
+    await page.click('#framesTabBtn');
+    for (let i = 0; i < 10; i++) await page.click('#addFrameBtn');
+    await expect(page.locator('#frameLabel')).toHaveText('Frame 11 of 11');
+
+    const listInfo = await page.evaluate(() => {
+      const list = document.querySelector('#framesList');
+      return { scrollHeight: list.scrollHeight, clientHeight: list.clientHeight };
+    });
+    // The list must actually overflow its own box — otherwise this test
+    // isn't exercising independent scrolling at all.
+    expect(listInfo.scrollHeight).toBeGreaterThan(listInfo.clientHeight);
+
+    await page.click('#prevFrameBtn');
+    await expect(page.locator('#frameLabel')).toHaveText('Frame 10 of 11');
+    await page.waitForTimeout(400); // smooth-scroll to settle
+
+    const currentThumbTop = await page.locator('.frame-thumb.current').evaluate(el => el.getBoundingClientRect().top);
+    const listTop = await page.locator('#framesList').evaluate(el => el.getBoundingClientRect().top);
+    // "Scrolled to the top" — the current thumbnail's top edge should be
+    // right at (or very near) the list's own top edge, not buried below.
+    expect(Math.abs(currentThumbTop - listTop)).toBeLessThan(5);
+  });
+
   test('drawing a line on the current frame refreshes its thumbnail without switching tabs', async ({ page }) => {
     await page.goto('/');
     await spawnTokenAt(page, 'offense', 10, 30);
