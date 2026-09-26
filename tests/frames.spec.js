@@ -508,6 +508,29 @@ test.describe('Frames sidebar tab — thumbnail previews', () => {
     expect(Math.abs(currentThumbTop - listTop)).toBeLessThan(5);
   });
 
+  test('the Frames list scroll position does not glitch to the top mid step-transition animation', async ({ page }) => {
+    await page.setViewportSize({ width: 900, height: 650 });
+    await page.goto('/');
+    await page.click('#framesTabBtn');
+    for (let i = 0; i < 8; i++) await page.click('#addFrameBtn');
+    for (let i = 0; i < 4; i++) await page.click('#prevFrameBtn'); // land mid-list, like the reported repro
+    await expect(page.locator('#frameLabel')).toHaveText('Frame 5 of 9');
+    await page.waitForTimeout(400);
+
+    const scrollTopBefore = await page.evaluate(() => document.querySelector('#framesList').scrollTop);
+    expect(scrollTopBefore).toBeGreaterThan(0); // sanity: scrolled down, not already at the top
+
+    await page.click('#stepNextFrameBtn');
+    // animateThroughFrames refreshes the frame bar (and rebuilds the
+    // thumbnail list) once right as the transition starts, before
+    // currentFrameIndex has actually changed — that rebuild must not
+    // reset the list's scrollTop to 0 in the process.
+    const midAnimationScrollTop = await page.evaluate(() => document.querySelector('#framesList').scrollTop);
+    expect(midAnimationScrollTop).toBeGreaterThan(0);
+
+    await expect(page.locator('#frameLabel')).toHaveText('Frame 6 of 9');
+  });
+
   test('drawing a line on the current frame refreshes its thumbnail without switching tabs', async ({ page }) => {
     await page.goto('/');
     await spawnTokenAt(page, 'offense', 10, 30);

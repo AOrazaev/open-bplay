@@ -69,6 +69,14 @@ function renderFrameThumbCanvas(frameTokens, frameLines, frameHighlights) {
 let lastScrolledFrameIndex = -1;
 
 function renderFramesPanel() {
+  // Rebuilding via innerHTML='' natively resets the list's own scrollTop
+  // to 0 (a scrollable element with no children has nothing to scroll) —
+  // without this, a rebuild that ISN'T switching frames (e.g. the
+  // buttons-disabled refresh animateThroughFrames fires right as
+  // playback starts, before currentFrameIndex has actually changed yet)
+  // would visibly snap the list to the top for a moment, since the
+  // scroll-to-current logic below only runs when the index changes.
+  const preservedScrollTop = framesListEl.scrollTop;
   framesListEl.innerHTML = '';
   frames.forEach((frame, index) => {
     const isCurrent = index === currentFrameIndex;
@@ -114,6 +122,8 @@ function renderFramesPanel() {
     lastScrolledFrameIndex = currentFrameIndex;
     const currentItem = framesListEl.querySelector('.frame-thumb.current');
     if (currentItem) currentItem.scrollIntoView({ block: 'start', behavior: 'smooth' });
+  } else {
+    framesListEl.scrollTop = preservedScrollTop;
   }
 }
 
